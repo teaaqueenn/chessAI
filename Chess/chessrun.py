@@ -42,7 +42,7 @@ def load_images():
     images = {}
     for color in ["white", "black"]:
         for piece in ["rook", "knight", "bishop", "queen", "king", "pawn"]:
-            image_path = f"C:\\Users\\Grace\\Documents\\GitHub\\Teaching AI to play\\Chess\\images\\{color} {piece}.png"
+            image_path = f"C:\\Users\\Grace\\Documents\\GitHub\\chessAI\\Chess\\images\\{color} {piece}.png"
             image = pygame.image.load(image_path)
             image = pygame.transform.scale(image, (SQUARE_SIZE // 2, SQUARE_SIZE // 2))
             images[f"{color}_{piece}"] = image
