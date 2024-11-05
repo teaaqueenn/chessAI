@@ -191,6 +191,11 @@ def self_play(model, target_model, optimizer, replay_buffer, epsilon, episode_re
         moves.append(move)
         previous_board.set_fen(board.fen())
         board.push(move)
+
+        if move in board.legal_moves:
+            print(f"AI Move: {board.san(move)} from {chess.square_name(move.from_square)} to {chess.square_name(move.to_square)}")
+        else:
+            print(f"Invalid move attempted: {board.san(move)}")
         
         reward = get_reward(board, previous_board)
         done = board.is_game_over()
@@ -210,12 +215,14 @@ def self_play(model, target_model, optimizer, replay_buffer, epsilon, episode_re
         images = load_images()
         draw_pieces(images)
         pygame.display.update()  # Ensure the screen is updated during self-play
+        print("Updating game screen...")
 
     episode_rewards.append(total_reward)
     return moves, episode_rewards
 
 # Main execution
 if __name__ == "__main__":
+    print("Entering main game loop...")
     model = ChessDQN()
     target_model = ChessDQN()
     target_model.load_state_dict(model.state_dict())
@@ -223,7 +230,7 @@ if __name__ == "__main__":
     replay_buffer = ReplayBuffer(REPLAY_MEMORY_SIZE)
 
     # Run training for a number of episodes
-    for episode in range(1000):
+    for episode in range(5):
         moves, episode_rewards = self_play(model, target_model, optimizer, replay_buffer, EPSILON_START, [])
         print(f"Episode {episode + 1}, Total Reward: {episode_rewards[-1]}")
 
