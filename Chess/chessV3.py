@@ -51,6 +51,13 @@ def play_game():
     while not board.is_game_over():
         display_board(board)
 
+        legal_moves = board.legal_moves
+
+        # Convert each legal move to UCI notation and print
+        legal_moves_uci = [move.uci() for move in legal_moves]
+        print("legal moves are:", legal_moves_uci)
+
+
         # Get the move from the player (example: "e2e4")
         move = input("Enter your move (e.g. 'e2e4'): ")
 
