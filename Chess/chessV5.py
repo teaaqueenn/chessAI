@@ -2,6 +2,8 @@ import chess
 import tkinter as tk
 from tkinter import messagebox
 import threading
+import torch
+import numpy as np
 
 
 GREEN = f'#395631'
@@ -98,6 +100,39 @@ def make_move(move_uci):
     except ValueError:
         print("Invalid UCI format or move.")
 
+def board_to_tensor(board):
+    # Create a tensor to represent the board state (12 layers, 8x8 grid)
+    tensor = torch.zeros((12, 8, 8), dtype=torch.float32)  # 12 layers (6 piece types for white and black)
+
+    # Iterate over each square on the chessboard (64 squares in total)
+    for square in range(64):
+        piece = board.piece_at(square)
+
+        if piece:  # If there is a piece at this square
+            row, col = divmod(square, 8)  # Get the row and column from the square number
+
+            # Determine the piece type and color
+            piece_type = piece.piece_type
+            color = piece.color
+
+            # Determine the index in the tensor: for white pieces, use positive values
+            # For black pieces, use negative values and the index to determine layer
+            layer = piece_type - 1  # piece_type 1 corresponds to layer 0, etc.
+
+            if color == chess.BLACK:
+                layer += 6  # Black pieces are in the second half of the tensor (layers 6 to 11)
+
+            # Add the piece's value to the appropriate position in the tensor
+            tensor[layer, row, col] = piece_values.get(piece_type, 0)
+
+    return tensor
+
+def print_board_tensor():
+    tensor = board_to_tensor(board)
+    print("Tensor shape:", tensor.shape)
+    print(tensor)
+
+
 # Function to play the game (with console input for moves)
 def play_game():
     while not board.is_game_over():
@@ -110,6 +145,7 @@ def play_game():
 
         # Get the move from the player (example: "e2e4")
         move_uci = input("Enter your move (e.g. 'e2e4'): ")
+        print_board_tensor()
 
         # Try to make the move
         make_move(move_uci)
