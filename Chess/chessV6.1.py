@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import random
+import time
 
 
 GREEN = f'#395631'
@@ -210,7 +211,7 @@ def display_title():
         "Choose a game mode to start: \n\n"
         "1. Player vs Player\n"
         "2. Player vs RLAI\n"
-        "3. RLAI vs RLAI (not implemented)"
+        "3. RLAI vs RLAI"
     )
     canvas.create_text(200, 150, text=description, font=("Arial", 14), fill="black", justify="center")
     
@@ -259,6 +260,8 @@ def board_to_tensor(board):
             # Add the piece's value to the appropriate position in the tensor
             tensor[layer, row, col] = 1  # We are simply marking the presence of a piece, so use a value of 1
 
+    # Flatten the tensor to match the input shape expected by the neural network
+    tensor = tensor.view(-1)  # Flatten the 12x8x8 tensor into a 768-length vector
     return tensor
 
 def print_board_tensor():
@@ -271,7 +274,7 @@ def select_game_mode():
     print("Select Game Mode:")
     print("Type 1 for Player vs Player (PvP)")
     print("Type 2 for Player vs RLAI (PvRLAI)")
-    print("Type 3 for RLAI vs RLAI (not implemented yet)")
+    print("Type 3 for RLAI vs RLAI (RLAIvRLAI)")
     mode = input("Enter the number of your choice: ")
     return mode
 
@@ -335,10 +338,58 @@ def play_pvrla():
     print("Game Over!")
     print("Result: " + board.result())
 
+def play_rla_vs_rla():
+    # Initialize two ChessRLAI agents (AI vs AI)
+    rla_agent_white = ChessRLAI(model=DQN())  # White AI
+    rla_agent_black = ChessRLAI(model=DQN())  # Black AI
+
+    # Display the initial board state
+    display_board()
+    
+    # Alternate turns between white and black AI
+    while not board.is_game_over():
+        # Display the board after every move
+        display_board()
+        root.update_idletasks()  # Force UI updates
+
+        # Get the current player (White's turn first)
+        if board.turn == chess.WHITE:
+            current_agent = rla_agent_white
+            print("White AI's turn:")
+        else:
+            current_agent = rla_agent_black
+            print("Black AI's turn:")
+
+        # Convert the board state to a tensor
+        state = board_to_tensor(board).unsqueeze(0)  # Add batch dimension
+
+        # Let the current agent (AI) select its move
+        action = current_agent.select_action(state)  # Choose an action based on the state
+
+        # Get the list of legal moves
+        legal_moves = list(board.legal_moves)
+
+        # Make sure the action is one of the legal moves
+        if action in legal_moves:
+            move = action  # Get the corresponding move from legal_moves
+            print(f"{'White' if board.turn == chess.WHITE else 'Black'} AI plays: {move}")
+            make_move(move.uci())  # Apply the move
+            display_board()  # Ensure the board is redrawn after the move
+            root.update_idletasks()  # Force UI updates
+        else:
+            print("Invalid action selected by AI!")
+
+        # Introduce a small delay for better viewing of the moves
+        root.after(700)  # Non-blocking way to add a delay for viewing purposes
+
+    # Once the game is over, print the result
+    print("Game Over!")
+    print(f"Result: {board.result()}")
+
 
 # Main function to start the game based on the selected mode
 def start_game():
-    display_title()
+    display_board()
 
     mode = select_game_mode()
 
@@ -349,7 +400,8 @@ def start_game():
         print("Starting Player vs RLAI mode...")
         play_pvrla()
     elif mode == "3":
-        print("RLAI vs RLAI mode is not implemented yet.")
+        print("Starting RLAI vs RLAI mode...")
+        play_rla_vs_rla()  
     else:
         print("Invalid choice. Please restart the game and select a valid mode.")
 
