@@ -42,30 +42,94 @@ class DQN(nn.Module):
         super(DQN, self).__init__()
         
         # Input layer: 12 * 8 * 8 = 768 (flattened input)
-        self.fc1 = nn.Linear(12 * 8 * 8, 512)  # First hidden layer with 512 units
-        self.fc2 = nn.Linear(512, 512)         # Second hidden layer with 512 units
-        self.fc3 = nn.Linear(512, 256)         # Third hidden layer with 256 units
-        self.fc4 = nn.Linear(256, 256)         # Fourth hidden layer with 256 units
-        self.fc5 = nn.Linear(256, 128)         # Fifth hidden layer with 128 units
-        self.fc6 = nn.Linear(128, 128)         # Sixth hidden layer with 128 units
-        self.fc7 = nn.Linear(128, 64)          # Seventh hidden layer with 64 units
-        self.fc8 = nn.Linear(64, 64)           # Eighth hidden layer with 64 units
-        self.fc9 = nn.Linear(64, 64)           # Ninth hidden layer with 64 units
-        self.fc10 = nn.Linear(64, 4672)        # Output layer: 4672 (number of possible moves)
+        self.fc1 = nn.Linear(12 * 8 * 8, 2048)  # First hidden layer with 2048 units
+        self.fc2 = nn.Linear(2048, 2048)        # Second hidden layer with 2048 units
+        self.fc3 = nn.Linear(2048, 1024)        # Third hidden layer with 1024 units
+        self.fc4 = nn.Linear(1024, 1024)        # Fourth hidden layer with 1024 units
+        self.fc5 = nn.Linear(1024, 512)         # Fifth hidden layer with 512 units
+        self.fc6 = nn.Linear(512, 512)          # Sixth hidden layer with 512 units
+        self.fc7 = nn.Linear(512, 256)          # Seventh hidden layer with 256 units
+        self.fc8 = nn.Linear(256, 256)          # Eighth hidden layer with 256 units
+        self.fc9 = nn.Linear(256, 128)          # Ninth hidden layer with 128 units
+        self.fc10 = nn.Linear(128, 128)         # Tenth hidden layer with 128 units
+        self.fc11 = nn.Linear(128, 64)          # Eleventh hidden layer with 64 units
+        self.fc12 = nn.Linear(64, 64)           # Twelfth hidden layer with 64 units
+        self.fc13 = nn.Linear(64, 32)           # Thirteenth hidden layer with 32 units
+        self.fc14 = nn.Linear(32, 32)           # Fourteenth hidden layer with 32 units
+        self.fc15 = nn.Linear(32, 16)           # Fifteenth hidden layer with 16 units
+        self.fc16 = nn.Linear(16, 16)           # Sixteenth hidden layer with 16 units
+        self.fc17 = nn.Linear(16, 8)            # Seventeenth hidden layer with 8 units
+        self.fc18 = nn.Linear(8, 8)             # Eighteenth hidden layer with 8 units
+        self.fc19 = nn.Linear(8, 4)             # Nineteenth hidden layer with 4 units
+        self.fc20 = nn.Linear(4, 4672)          # Twentieth hidden layer (output) with 4672 units (for possible moves)
+
+        # Dropout layer to prevent overfitting (applied after each hidden layer)
+        self.dropout = nn.Dropout(0.3)  # Dropout with 50% probability of zeroing out inputs
 
     def forward(self, x):
         # Passing the input through all the layers with ReLU activation
-        x = torch.relu(self.fc1(x))  # First hidden layer
-        x = torch.relu(self.fc2(x))  # Second hidden layer
-        x = torch.relu(self.fc3(x))  # Third hidden layer
-        x = torch.relu(self.fc4(x))  # Fourth hidden layer
-        x = torch.relu(self.fc5(x))  # Fifth hidden layer
-        x = torch.relu(self.fc6(x))  # Sixth hidden layer
-        x = torch.relu(self.fc7(x))  # Seventh hidden layer
-        x = torch.relu(self.fc8(x))  # Eighth hidden layer
-        x = torch.relu(self.fc9(x))  # Ninth hidden layer
-        x = self.fc10(x)             # Output layer (no activation function here)
+        x = torch.relu(self.fc1(x))
+        x = self.dropout(x)
+        
+        x = torch.relu(self.fc2(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc3(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc4(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc5(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc6(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc7(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc8(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc9(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc10(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc11(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc12(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc13(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc14(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc15(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc16(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc17(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc18(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc19(x))
+        x = self.dropout(x)
+
+        # Output layer (no activation function here, raw Q-values)
+        x = self.fc20(x)
+
         return x
+
 
 
 # Define the ChessRLAI class
@@ -275,7 +339,7 @@ def play_pvrla():
 # Main function to start the game based on the selected mode
 def start_game():
     display_title()
-    
+
     mode = select_game_mode()
 
     if mode == "1":
