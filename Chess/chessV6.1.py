@@ -172,15 +172,23 @@ def print_board_tensor():
     print("Tensor shape:", tensor.shape)
     print(tensor)
 
+# Function to ask the player for the game mode
+def select_game_mode():
+    print("Select Game Mode:")
+    print("Type 1 for Player vs Player (PvP)")
+    print("Type 2 for Player vs RLAI (PvRLAI)")
+    print("Type 3 for RLAI vs RLAI (not implemented yet)")
+    mode = input("Enter the number of your choice: ")
+    return mode
 
-# Function to play the game (with console input for moves)
-def play_game():
+# Function to handle the Player vs Player mode
+def play_pvp():
     while not board.is_game_over():
         display_board()
 
         print(" ")
         # Print all legal moves
-        print("Legal moves:")
+        print("Legal moves: ")
         print(board.legal_moves)
 
         # Get the move from the player (example: "e2e4")
@@ -189,19 +197,68 @@ def play_game():
 
         # Try to make the move
         make_move(move_uci)
-        
+
+    print("Game Over!")
+    print("Result: " + board.result())
+
+# Function to handle the Player vs RLAI mode
+# Function to handle the Player vs RLAI mode
+def play_pvrla():
+    # Initialize the ChessRLAI agent for the AI
+    rla_agent = ChessRLAI(model=DQN())
+
+    while not board.is_game_over():
+        display_board()
+
+        print(" ")
+        # Print all legal moves
+        print("Legal moves: ")
+        print(board.legal_moves)
+
+        # Get the move from the player (example: "e2e4")
+        move_uci = input("Enter your move (e.g. 'e2e4'): ")
+        print_board_tensor()
+
+        # Try to make the player's move
+        make_move(move_uci)
+
+        # If it's the RLAI's turn (assume AI plays after player)
+        if not board.is_game_over():
+            state = board_to_tensor(board).unsqueeze(0)  # Add batch dimension
+            action = rla_agent.select_action(state)  # Let the RLAI select its move
+
+            # Ensure that 'action' is one of the legal moves
+            legal_moves = list(board.legal_moves)
+
+            # Check if the selected action (move) is a valid legal move
+            if action in legal_moves:
+                move = action  # Get the corresponding move from legal_moves
+                print(f"RLAI plays: {move}")
+                make_move(move.uci())
+            else:
+                print("Invalid action selected by RLAI!")
+
     print("Game Over!")
     print("Result: " + board.result())
 
 
-def start_game_thread():
-    threading.Thread(target=play_game, daemon=True).start()
+# Main function to start the game based on the selected mode
+def start_game():
+    mode = select_game_mode()
+
+    if mode == "1":
+        print("Starting Player vs Player mode...")
+        play_pvp()
+    elif mode == "2":
+        print("Starting Player vs RLAI mode...")
+        play_pvrla()
+    elif mode == "3":
+        print("RLAI vs RLAI mode is not implemented yet.")
+    else:
+        print("Invalid choice. Please restart the game and select a valid mode.")
 
 # Initial board display
 display_board()
 
-# Start the game (in a thread)
-start_game_thread()
-
-# Main loop
-root.mainloop()
+# Start the game
+start_game()
