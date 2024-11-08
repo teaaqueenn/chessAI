@@ -299,7 +299,6 @@ def play_pvp():
     print("Result: " + board.result())
 
 # Function to handle the Player vs RLAI mode
-# Function to handle the Player vs RLAI mode
 def play_pvrla():
     # Initialize the ChessRLAI agent for the AI
     rla_agent = ChessRLAI(model=DQN())
@@ -334,6 +333,7 @@ def play_pvrla():
                 make_move(move.uci())
             else:
                 print("Invalid action selected by RLAI!")
+                continue
 
     print("Game Over!")
     print("Result: " + board.result())
@@ -377,14 +377,15 @@ def play_rla_vs_rla():
             display_board()  # Ensure the board is redrawn after the move
             root.update_idletasks()  # Force UI updates
         else:
-            print("Invalid action selected by AI!")
+            continue
 
         # Introduce a small delay for better viewing of the moves
-        root.after(700)  # Non-blocking way to add a delay for viewing purposes
+        root.after(100)  # Non-blocking way to add a delay for viewing purposes
 
     # Once the game is over, print the result
     print("Game Over!")
     print(f"Result: {board.result()}")
+    start_game()
 
 
 # Main function to start the game based on the selected mode
