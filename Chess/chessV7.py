@@ -143,19 +143,42 @@ class ChessRLAI:
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         self.loss_fn = nn.MSELoss()  # Loss function for Q-values
         self.gamma = gamma  # Discount factor for future rewards
-    
+
     def select_action(self, state):
         """
         Selects an action using epsilon-greedy strategy, with epsilon decay.
+        Maps Q-values to legal moves.
         """
+        legal_moves = list(board.legal_moves)  # Get all legal moves in UCI notation
+        legal_move_count = len(legal_moves)
+
         if random.random() < self.epsilon:
-            legalMoves = list(board.legal_moves)
-            action = random.choice(legalMoves)
+            # Explore: Choose a random legal move
+            action = random.choice(legal_moves)
         else:
+            # Exploit: Choose the move with the highest Q-value from the model's output
             with torch.no_grad():
+                # Get Q-values for all possible moves
                 q_values = self.model(state)  # Get Q-values for all possible moves
-                action = torch.argmax(q_values).item()  # Select the move with the highest Q-value
-        
+                q_values = q_values.squeeze(0)  # Remove the batch dimension
+                
+                # Ensure we select only from legal moves
+                legal_q_values = torch.zeros(legal_move_count)  # A tensor to hold Q-values for legal moves
+
+                # Map legal moves to their corresponding Q-values
+                for idx, move in enumerate(legal_moves):
+                    # Create a list of all possible moves (in the same order as the model's output)
+                    all_moves = list(board.legal_moves)  # Get all possible legal moves
+                    try:
+                        move_index = all_moves.index(move)  # Find the index of the legal move
+                        legal_q_values[idx] = q_values[move_index]  # Assign the Q-value for this legal move
+                    except ValueError:
+                        continue  # This should never happen, but just in case.
+
+                # Now select the move with the highest Q-value from the legal moves
+                action_index = torch.argmax(legal_q_values).item()
+                action = legal_moves[action_index]  # Get the corresponding legal move
+
         # Decay epsilon after every action to reduce exploration over time
         self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
         
