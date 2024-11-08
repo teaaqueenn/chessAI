@@ -101,7 +101,6 @@ def display_board():
     # Clear the canvas
     canvas.delete("all")
     
-    # Loop over the 8x8 board to draw the pieces
     square_size = 50
     for row in range(8):
         for col in range(8):
@@ -122,6 +121,37 @@ def display_board():
                 canvas.create_text(col * square_size + square_size / 2,
                                    row * square_size + square_size / 2,
                                    text=piece_char, font=("Arial", 24))
+
+    # Draw row labels (1-8) on the left side of the board
+    for row in range(8):
+        canvas.create_text(-10, row * square_size + square_size / 2,
+                           text=str(8 - row), font=("Arial", 14))  # 8-1, 7-2, ..., 1-8
+
+    # Draw column labels (a-h) at the bottom of the board
+    for col in range(8):
+        canvas.create_text(col * square_size + square_size / 2,
+                           8 * square_size + 10,  # Position below the board
+                           text=chr(ord('a') + col), font=("Arial", 14))
+
+
+def display_title():
+    # Clear the canvas
+    canvas.delete("all")
+    
+    # Add the title text at the top of the canvas
+    canvas.create_text(200, 50, text="Welcome to Chess!", font=("Arial", 24, "bold"), fill="black")
+
+    # Add a description text below the title
+    description = (
+        "Choose a game mode to start: \n\n"
+        "1. Player vs Player\n"
+        "2. Player vs RLAI\n"
+        "3. RLAI vs RLAI (not implemented)"
+    )
+    canvas.create_text(200, 150, text=description, font=("Arial", 14), fill="black", justify="center")
+    
+    # Ensure canvas updates
+    root.update()  # This forces an update of the canvas and GUI elements
 
 
 # Function to handle a player's move from the console
@@ -244,6 +274,8 @@ def play_pvrla():
 
 # Main function to start the game based on the selected mode
 def start_game():
+    display_title()
+    
     mode = select_game_mode()
 
     if mode == "1":
@@ -257,8 +289,8 @@ def start_game():
     else:
         print("Invalid choice. Please restart the game and select a valid mode.")
 
-# Initial board display
-display_board()
-
 # Start the game
 start_game()
+
+# Initial board display
+display_board()
