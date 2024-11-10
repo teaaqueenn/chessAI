@@ -320,6 +320,8 @@ def play_pvp():
 
     print("Game Over!")
     print("Result: " + board.result())
+    board.set_board_fen(chess.STARTING_BOARD_FEN)
+    start_game()
 
 # Function to handle the Player vs RLAI mode
 def play_pvrla():
@@ -360,6 +362,8 @@ def play_pvrla():
 
     print("Game Over!")
     print("Result: " + board.result())
+    board.set_board_fen(chess.STARTING_BOARD_FEN)
+    start_game()
 
 def play_rla_vs_rla():
     # Initialize two ChessRLAI agents (AI vs AI)
@@ -408,6 +412,7 @@ def play_rla_vs_rla():
     # Once the game is over, print the result
     print("Game Over!")
     print(f"Result: {board.result()}")
+    board.set_board_fen(chess.STARTING_BOARD_FEN)
     start_game()
 
 
