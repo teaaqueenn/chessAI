@@ -8,10 +8,18 @@ import torch.optim as optim
 import numpy as np
 import random
 import time
+import matplotlib as plt
+import copy
+
 
 
 GREEN = f'#395631'
 BEIGE = f'#d1b281'
+
+game_numbers = []
+total_rewards = []
+losses = []
+
 
 # Initialize the chess board
 board = chess.Board()
@@ -142,54 +150,55 @@ class ChessRLAI:
         self.loss_fn = nn.MSELoss()  # Loss function for Q-values
         self.gamma = gamma  # Discount factor for future rewards
 
-    def select_action(self, state, board):
+        self.total_reward = 0.0
+        self.total_loss = 0.0
+
+
+    def reward_of_move(self, move, board) -> float:
         """
-        Selects an action using epsilon-greedy strategy, with epsilon decay.
-        Maps Q-values to legal moves.
-        
+        Calculate the reward for a given move. The reward is based on:
+        - Material gain or loss
+        - Whether the move puts the opponent in check or checkmate
+        - 
+
         Parameters:
-            state (torch.Tensor): The current state of the game (as a tensor).
-            board (chess.Board): The current chessboard state.
-        
+            move (chess.Move): The move to evaluate.
+            board (chess.Board): The current board state.
+
         Returns:
-            chess.Move: The best move selected.
+            float: The reward for the move.
         """
-        legal_moves = list(board.legal_moves)  # Get all legal moves in UCI notation
-        legal_move_count = len(legal_moves)
+        reward = 0.0
 
-        if random.random() < self.epsilon:
-            # Explore: Choose a random legal move
-            action = random.choice(legal_moves)
-        else:
-            # Exploit: Choose the move with the highest Q-value from the model's output
-            with torch.no_grad():
-                # Get Q-values for all possible moves
-                q_values = self.model(state)  # Get Q-values for all possible moves
-                q_values = q_values.squeeze(0)  # Remove the batch dimension
-                
-                # Ensure we select only from legal moves
-                legal_q_values = torch.zeros(legal_move_count)  # A tensor to hold Q-values for legal moves
+        # Step 1: Check if the move results in a capture
+        if board.is_capture(move):
+            captured_piece = board.piece_at(move.to_square)
+            # Assign positive reward for capturing a piece
+            if captured_piece:
+                piece_type = captured_piece.piece_type
+                # Assign value based on the piece captured
+                if piece_type == chess.PAWN:
+                    reward += 1.0
+                elif piece_type == piece_type == chess.BISHOP:
+                    reward += 3.0
+                elif piece_type == piece_type == chess.BISHOP:
+                    reward += 5.0
+                elif piece_type == chess.ROOK:
+                    reward += 7.0
+                elif piece_type == chess.QUEEN:
+                    reward += 9.0
 
-                # Map legal moves to their corresponding Q-values
-                for idx, move in enumerate(legal_moves):
-                    # Create a list of all possible moves (in the same order as the model's output)
-                    all_moves = list(board.legal_moves)  # Get all possible legal moves
-                    try:
-                        move_index = all_moves.index(move)  # Find the index of the legal move
-                        legal_q_values[idx] = q_values[move_index]  # Assign the Q-value for this legal move
-                    except ValueError:
-                        continue  # This should never happen, but just in case.
+        # Step 2: Check if the move results in check or checkmate
+        board.push(move)
+        if board.is_checkmate():
+            reward += 50  # Positive large reward for checkmate
+        elif board.is_check():
+            reward += 10  # Smaller positive reward for check
+        board.pop()
 
-                # Now select the move with the highest Q-value from the legal moves
-                action_index = torch.argmax(legal_q_values).item()
-                action = legal_moves[action_index]  # Get the corresponding legal move
+        return reward
 
-        # Decay epsilon after every action to reduce exploration over time
-        self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
-        
-        return action
-
-    def find_best_move_with_q_values(self, board, legal_moves, reward, gamma=0.99, alpha=0.1):
+    def find_best_move_with_q_values(self, board, gamma=0.99, alpha=0.1):
         """
         Calculate the Q-values for each legal move, update the Q-value using Q-learning,
         and return the move with the highest Q-value.
@@ -207,44 +216,115 @@ class ChessRLAI:
         # Initialize a list to store the Q-values for each legal move
         q_values = []
 
-        # Loop through each legal move and calculate the Q-value
-        for move in legal_moves:
-            # Step 1: Convert the current board state to tensor
-            state_tensor = board_to_tensor(board).unsqueeze(0)  # Add batch dimension
+        legal_moves = list(board.legal_moves)
 
-            # Step 2: Get the Q-values for the current state
-            current_q_values = self.model(state_tensor).squeeze(0)
+        rand_val = random.random()
 
-            # Step 3: Simulate the move and get the new state (board after the move)
-            board.push(move)
-            next_state_tensor = board_to_tensor(board).unsqueeze(0)  # Get the next state tensor after the move
+        print("rand val: ", rand_val)
+        print("epsilon val: ", self.epsilon)
 
-            # Step 4: Get the Q-values for the next state
-            next_q_values = self.model(next_state_tensor).squeeze(0)
+        # Initialize best_move outside the if-else block
+        best_move = None
 
-            # Step 5: Calculate the maximum Q-value for the next state
-            max_next_q_value = torch.max(next_q_values).item()
+        if rand_val < self.epsilon:
+            # Explore: Choose a random legal move
+            best_move = random.choice(legal_moves)
+        else:
+            print("using q-vals")
 
-            # Step 6: Find the index of the move in the model's Q-value predictions
-            move_index = legal_moves.index(move)
+            # Exploit: Choose the move with the highest Q-value from the model's output
+            with torch.no_grad():
+                print("legal moves: ", legal_moves)
+                # Loop through each legal move and calculate the Q-value
+                for move in legal_moves:
+                    # Step 1: Convert the current board state to tensor
+                    state_tensor = board_to_tensor(board).unsqueeze(0)  # Add batch dimension
 
-            # Step 7: Get the current Q-value for the move
-            current_q_value = current_q_values[move_index].item()
+                    # Step 2: Get the Q-values for the current state
+                    current_q_values = self.model(state_tensor).squeeze(0)
 
-            # Step 8: Calculate the new Q-value using the Q-learning equation
-            updated_q_value = current_q_value + alpha * (reward + gamma * max_next_q_value - current_q_value)
+                    # Step 3: Simulate the move by copying the board and making the move on the clone
+                    cloned_board = copy.deepcopy(board)  # Clone the board
+                    cloned_board.push(move)  # Make the move on the cloned board
 
-            # Append the updated Q-value to the list
-            q_values.append(updated_q_value)
+                    # Step 4: Convert the new state after the move to tensor
+                    next_state_tensor = board_to_tensor(cloned_board).unsqueeze(0)  # Get the next state tensor after the move
 
-            # Undo the move for the next iteration
-            board.pop()
+                    # Step 5: Get the Q-values for the next state
+                    next_q_values = self.model(next_state_tensor).squeeze(0)
 
-        # Step 9: Find the move with the highest Q-value
-        best_move_index = np.argmax(q_values)
-        best_move = legal_moves[best_move_index]
+                    print("next q vals: ", next_q_values)
+
+                    # Step 6: Calculate the maximum Q-value for the next state
+                    max_next_q_value = torch.max(next_q_values).item()
+                    print("max q vals: ", max_next_q_value)
+
+                    # Step 7: Find the index of the move in the model's Q-value predictions
+                    move_index = legal_moves.index(move)
+                    print("move index: ", move_index)
+
+                    # Step 8: Get the current Q-value for the move
+                    current_q_value = current_q_values[move_index].item()
+                    print("current q vals: ", current_q_value)
+
+                    # Step 9: Calculate the new Q-value using the Q-learning equation
+                    updated_q_value = current_q_value + alpha * (self.reward_of_move(move, board) + gamma * max_next_q_value - current_q_value)
+                    print("updated q vals: ", updated_q_value)
+
+                    # Append the updated Q-value to the list
+                    q_values.append(updated_q_value)
+                    print("all q vals: ", q_values)
+
+                # Track cumulative reward (this should be done only after best_move is assigned)
+                self.total_reward += self.reward_of_move(best_move, board)
+
+                # Convert q_values list to tensor
+                q_values_tensor = torch.tensor(q_values)
+
+                # Step 10: Calculate the loss (using MSE) and update Q-value
+                # We should update the Q-value for the move that was selected
+                updated_q_value_tensor = torch.tensor([updated_q_value])  # Convert updated_q_value to tensor
+
+                # Ensure q_values_tensor is a tensor of shape (N,)
+                loss = self.loss_fn(q_values_tensor, updated_q_value_tensor)
+
+                # Update the total loss
+                self.total_loss += loss.item()
+
+                # Step 11: Find the move with the highest Q-value (from q_values)
+                best_move_index = np.argmax(q_values)
+                best_move = legal_moves[best_move_index]
+
+        # Decay epsilon after each move
+        self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
 
         return best_move
+
+
+
+def plot_results():
+    # Plot the results of the game
+    plt.figure(figsize=(10, 5))
+
+    # Plot Total Reward vs Game Number
+    plt.subplot(1, 2, 1)
+    plt.plot(game_numbers, total_rewards, label="Total Reward", color='g')
+    plt.xlabel('Game Number')
+    plt.ylabel('Total Reward')
+    plt.title('Game Number vs Total Reward')
+    plt.grid(True)
+
+    # Plot Loss vs Game Number
+    plt.subplot(1, 2, 2)
+    plt.plot(game_numbers, losses, label="Loss", color='r')
+    plt.xlabel('Game Number')
+    plt.ylabel('Loss')
+    plt.title('Game Number vs Loss')
+    plt.grid(True)
+
+    # Show the plot
+    plt.tight_layout()
+    plt.show()
 
 # Function to display the board in Tkinter
 def display_board():
@@ -282,6 +362,8 @@ def display_board():
         canvas.create_text(col * square_size + square_size / 2,
                            8 * square_size + 10,  # Position below the board
                            text=chr(ord('a') + col), font=("Arial", 14))
+    
+    #plot_results()
 
 
 def display_title():
@@ -382,13 +464,16 @@ def play_pvp():
 
     print("Game Over!")
     print("Result: " + board.result())
+
     board.set_board_fen(chess.STARTING_BOARD_FEN)
     start_game()
+
+global rla_agent 
+rla_agent = ChessRLAI(model=DQN())
 
 # Function to handle the Player vs RLAI mode
 def play_pvrla():
     # Initialize the ChessRLAI agent for the AI
-    rla_agent = ChessRLAI(model=DQN())
 
     while not board.is_game_over():
         display_board()
@@ -408,7 +493,7 @@ def play_pvrla():
         # If it's the RLAI's turn (assume AI plays after player)
         if not board.is_game_over():
             state = board_to_tensor(board).unsqueeze(0)  # Add batch dimension
-            action = rla_agent.select_action(state, board)  # Let the RLAI select its move
+            action = rla_agent.find_best_move_with_q_values(board)  # Let the RLAI select its move
 
             # Ensure that 'action' is one of the legal moves
             legal_moves = list(board.legal_moves)
@@ -424,13 +509,22 @@ def play_pvrla():
 
     print("Game Over!")
     print("Result: " + board.result())
+    game_number += 1
     board.set_board_fen(chess.STARTING_BOARD_FEN)
     start_game()
 
+global rla_agent_white
+rla_agent_white = ChessRLAI(model=DQN())  # White AI
+global rla_agent_black
+rla_agent_black = ChessRLAI(model=DQN())  # Black AI
+
+global game_number
+game_number = 1
+
 def play_rla_vs_rla():
     # Initialize two ChessRLAI agents (AI vs AI)
-    rla_agent_white = ChessRLAI(model=DQN())  # White AI
-    rla_agent_black = ChessRLAI(model=DQN())  # Black AI
+    #rla_agent_white = ChessRLAI(model=DQN())  # White AI
+    #rla_agent_black = ChessRLAI(model=DQN())  # Black AI
 
     # Display the initial board state
     display_board()
@@ -453,7 +547,7 @@ def play_rla_vs_rla():
         state = board_to_tensor(board).unsqueeze(0)  # Add batch dimension
 
         # Let the current agent (AI) select its move
-        action = current_agent.select_action(state, board)  # Choose an action based on the state
+        action = current_agent.find_best_move_with_q_values(board)    # Choose an action based on the state
 
         # Get the list of legal moves
         legal_moves = list(board.legal_moves)
@@ -469,11 +563,19 @@ def play_rla_vs_rla():
             continue
 
         # Introduce a small delay for better viewing of the moves
-        root.after(100)  # Non-blocking way to add a delay for viewing purposes
+        root.after(50)  # Non-blocking way to add a delay for viewing purposes
+
+    # After the game ends, record total reward and loss
+    game_numbers.append(game_number)
+    total_rewards.append(rla_agent_white.total_reward + rla_agent_black.total_reward)
+    losses.append(rla_agent_white.total_loss + rla_agent_black.total_loss)
 
     # Once the game is over, print the result
     print("Game Over!")
     print(f"Result: {board.result()}")
+
+    game_number += 1
+
     board.set_board_fen(chess.STARTING_BOARD_FEN)
     start_game()
 
