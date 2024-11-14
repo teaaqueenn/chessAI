@@ -16,6 +16,7 @@ import copy
 GREEN = f'#395631'
 BEIGE = f'#d1b281'
 
+global game_numbers
 game_numbers = []
 total_rewards = []
 losses = []
@@ -170,8 +171,7 @@ class ChessRLAI:
         """
         reward = 0.0
 
-        # Step 1: Check if the move results in a capture
-        if board.is_capture(move):
+        if board.is_capture(move) and move is not None:
             captured_piece = board.piece_at(move.to_square)
             # Assign positive reward for capturing a piece
             if captured_piece:
@@ -234,7 +234,6 @@ class ChessRLAI:
 
             # Exploit: Choose the move with the highest Q-value from the model's output
             with torch.no_grad():
-                print("legal moves: ", legal_moves)
                 # Loop through each legal move and calculate the Q-value
                 for move in legal_moves:
                     # Step 1: Convert the current board state to tensor
@@ -253,30 +252,20 @@ class ChessRLAI:
                     # Step 5: Get the Q-values for the next state
                     next_q_values = self.model(next_state_tensor).squeeze(0)
 
-                    print("next q vals: ", next_q_values)
-
                     # Step 6: Calculate the maximum Q-value for the next state
                     max_next_q_value = torch.max(next_q_values).item()
-                    print("max q vals: ", max_next_q_value)
 
                     # Step 7: Find the index of the move in the model's Q-value predictions
                     move_index = legal_moves.index(move)
-                    print("move index: ", move_index)
 
                     # Step 8: Get the current Q-value for the move
                     current_q_value = current_q_values[move_index].item()
-                    print("current q vals: ", current_q_value)
 
                     # Step 9: Calculate the new Q-value using the Q-learning equation
                     updated_q_value = current_q_value + alpha * (self.reward_of_move(move, board) + gamma * max_next_q_value - current_q_value)
-                    print("updated q vals: ", updated_q_value)
 
                     # Append the updated Q-value to the list
                     q_values.append(updated_q_value)
-                    print("all q vals: ", q_values)
-
-                # Track cumulative reward (this should be done only after best_move is assigned)
-                self.total_reward += self.reward_of_move(best_move, board)
 
                 # Convert q_values list to tensor
                 q_values_tensor = torch.tensor(q_values)
@@ -295,6 +284,9 @@ class ChessRLAI:
                 best_move_index = np.argmax(q_values)
                 best_move = legal_moves[best_move_index]
 
+                # Track cumulative reward (this should be done only after best_move is assigned)
+                self.total_reward += self.reward_of_move(best_move, board)
+
         # Decay epsilon after each move
         self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
 
@@ -303,26 +295,25 @@ class ChessRLAI:
 
 
 def plot_results():
+    global white_wins, black_wins, stalemates
     # Plot the results of the game
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(12, 6))
 
     # Plot Total Reward vs Game Number
     plt.subplot(1, 2, 1)
     plt.plot(game_numbers, total_rewards, label="Total Reward", color='g')
+    plt.scatter(game_numbers, losses, color='r', label='Losses')  # Losses as dots
     plt.xlabel('Game Number')
     plt.ylabel('Total Reward')
     plt.title('Game Number vs Total Reward')
-    plt.grid(True)
+    plt.legend()
 
-    # Plot Loss vs Game Number
     plt.subplot(1, 2, 2)
-    plt.plot(game_numbers, losses, label="Loss", color='r')
-    plt.xlabel('Game Number')
-    plt.ylabel('Loss')
-    plt.title('Game Number vs Loss')
-    plt.grid(True)
+    plt.pie([white_wins, black_wins, stalemates],
+            labels=['White Wins', 'Black Wins', 'Stalemates'],
+            autopct='%1.1f%%', startangle=90)
+    plt.title('Game Results')
 
-    # Show the plot
     plt.tight_layout()
     plt.show()
 
@@ -445,6 +436,9 @@ def select_game_mode():
     mode = input("Enter the number of your choice: ")
     return mode
 
+global game_number
+game_number = 1
+
 # Function to handle the Player vs Player mode
 def play_pvp():
     while not board.is_game_over():
@@ -518,10 +512,17 @@ rla_agent_white = ChessRLAI(model=DQN())  # White AI
 global rla_agent_black
 rla_agent_black = ChessRLAI(model=DQN())  # Black AI
 
-global game_number
-game_number = 1
+
+white_wins = 0
+black_wins = 0
+stalemates = 0
 
 def play_rla_vs_rla():
+    global game_number
+    global game_numbers
+    global white_wins, black_wins, stalemates
+    print(game_number)
+
     # Initialize two ChessRLAI agents (AI vs AI)
     #rla_agent_white = ChessRLAI(model=DQN())  # White AI
     #rla_agent_black = ChessRLAI(model=DQN())  # Black AI
@@ -562,17 +563,36 @@ def play_rla_vs_rla():
         else:
             continue
 
+        plot_results()
+
         # Introduce a small delay for better viewing of the moves
-        root.after(50)  # Non-blocking way to add a delay for viewing purposes
+        root.after(20)  # Non-blocking way to add a delay for viewing purposes
 
     # After the game ends, record total reward and loss
     game_numbers.append(game_number)
     total_rewards.append(rla_agent_white.total_reward + rla_agent_black.total_reward)
     losses.append(rla_agent_white.total_loss + rla_agent_black.total_loss)
 
+    plot_results()
+
     # Once the game is over, print the result
     print("Game Over!")
     print(f"Result: {board.result()}")
+
+    result = board.result()
+    if result == "1-0":  # White wins
+        white_wins += 1
+        print("White wins!")
+    elif result == "0-1":  # Black wins
+        black_wins += 1
+        print("Black wins!")
+    else:
+        stalemates += 1
+        print("It's a draw!")
+
+    print("white wins: ", white_wins)
+    print("black wins: ", black_wins)
+    print("stalemates: ", stalemates)
 
     game_number += 1
 
@@ -597,6 +617,7 @@ def start_game():
         play_rla_vs_rla()  
     else:
         print("Invalid choice. Please restart the game and select a valid mode.")
+        start_game()
 
 # Start the game
 start_game()
