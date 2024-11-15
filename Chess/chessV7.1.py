@@ -9,6 +9,8 @@ import numpy as np
 import random
 import time
 import matplotlib as plt
+from matplotlib import figure
+from matplotlib import pyplot
 import copy
 
 
@@ -293,35 +295,36 @@ class ChessRLAI:
         return best_move
 
 
-
 def plot_results():
-    global white_wins, black_wins, stalemates
-    # Plot the results of the game
-    plt.figure(figsize=(12, 6))
+    global white_wins, black_wins, stalemates, game_numbers, total_rewards, losses
 
-    # Plot Total Reward vs Game Number
-    plt.subplot(1, 2, 1)
-    plt.plot(game_numbers, total_rewards, label="Total Reward", color='g')
-    plt.scatter(game_numbers, losses, color='r', label='Losses')  # Losses as dots
-    plt.xlabel('Game Number')
-    plt.ylabel('Total Reward')
-    plt.title('Game Number vs Total Reward')
-    plt.legend()
+    # Create a 1x2 grid of subplots (1 row, 2 columns)
+    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(14, 6))  # Adjusted figsize to fit two subplots
 
-    plt.subplot(1, 2, 2)
-    plt.pie([white_wins, black_wins, stalemates],
-            labels=['White Wins', 'Black Wins', 'Stalemates'],
-            autopct='%1.1f%%', startangle=90)
-    plt.title('Game Results')
+    # Plot Total Reward vs Game Number (First subplot - Left)
+    axs[0].plot(game_numbers, total_rewards, color='b', label='Total Rewards')  # Line plot for total rewards
+    axs[0].scatter(game_numbers, losses, color='r', label='Losses')  # Scatter plot for losses
+    axs[0].set(xlabel='Game Number', ylabel='Total Reward / Losses', title='Game Number vs Total Reward and Losses')
+    axs[0].grid(True)
+    axs[0].legend()  # Show legend for both line and scatter
 
+    # Pie chart (Second subplot - Right)
+    axs[1].pie([white_wins, black_wins, stalemates], labels=['White Wins', 'Black Wins', 'Stalemates'],
+               autopct='%1.1f%%', startangle=90)
+    axs[1].set_title('Game Results')
+
+    # Adjust layout to make sure there's no overlap
     plt.tight_layout()
+
+    # Show the plot
     plt.show()
+
 
 # Function to display the board in Tkinter
 def display_board():
     # Clear the canvas
-    canvas.delete("all")
     
+    canvas.delete("all")
     square_size = 50
     for row in range(8):
         for col in range(8):
@@ -354,7 +357,7 @@ def display_board():
                            8 * square_size + 10,  # Position below the board
                            text=chr(ord('a') + col), font=("Arial", 14))
     
-    #plot_results()
+    plot_results()
 
 
 def display_title():
@@ -563,8 +566,6 @@ def play_rla_vs_rla():
         else:
             continue
 
-        plot_results()
-
         # Introduce a small delay for better viewing of the moves
         root.after(20)  # Non-blocking way to add a delay for viewing purposes
 
@@ -573,7 +574,6 @@ def play_rla_vs_rla():
     total_rewards.append(rla_agent_white.total_reward + rla_agent_black.total_reward)
     losses.append(rla_agent_white.total_loss + rla_agent_black.total_loss)
 
-    plot_results()
 
     # Once the game is over, print the result
     print("Game Over!")
