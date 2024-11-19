@@ -42,7 +42,7 @@ root = tk.Tk()
 root.title("Chess Game")
 
 # Create a canvas to draw the chessboard
-canvas = tk.Canvas(root, width=400, height=400)
+canvas = tk.Canvas(root, width=670, height=670)
 canvas.pack()
 
 # Define the Deep Q-Network (DQN) model
@@ -293,6 +293,7 @@ class ChessRLAI:
         self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
 
         return best_move
+    
 
 
 def plot_results():
@@ -319,13 +320,75 @@ def plot_results():
     # Show the plot
     plt.show()
 
+highlighted_square = None  # Global variable to track highlighted square
+highlighted_legal_moves = []           # List to store legal moves for the selected piece
+
+# Function to handle click events
+# Function to handle click events
+def on_click(event):
+    global highlighted_square, highlighted_legal_moves  # Access global variables
+
+    # Calculate the row and column of the clicked square
+    col = event.x // 80
+    row = event.y // 80
+
+    # Convert to chess notation (e.g., "a1", "h8")
+    chess_col = chr(col + 97)  # Convert column to letter ('a' to 'h')
+    chess_row = 8 - row        # Convert row to number ('1' to '8')
+    clicked_square = chess_col + str(chess_row)
+
+    # Print the chessboard notation (e.g., "a1", "h8") for debugging
+    print(f"Clicked on square: {clicked_square}")
+
+    # If a piece is selected, calculate its legal moves
+    piece = board.piece_at(chess.square(col, 7 - row))
+    
+    if piece:
+        if highlighted_square == (row, col):
+            # If the same square is clicked again, deselect the piece and clear legal moves
+            highlighted_square = None
+            highlighted_legal_moves = []  # Clear highlighted legal moves
+        else:
+            # If a new piece is selected, update highlighted square and legal moves
+            highlighted_square = (row, col)
+            highlighted_legal_moves = get_legal_moves(board, clicked_square)
+
+    # Redraw the board with the updated highlighted square and legal moves
+    canvas.delete("all")  # Clear the canvas
+    display_board()        # Redraw the board with updated highlights
+
+# Function to get legal moves for a given square (in UCI notation)
+def get_legal_moves(board, clicked_square):
+    legal_moves = []
+    moves = board.legal_moves  # This should be a set of LegalMove objects
+    
+    for move in moves:
+        # Convert the move to UCI notation (e.g., "e2e4")
+        uci_move = move.uci()
+        
+        # Check if the first two characters of UCI move match the clicked square
+        if uci_move[:2] == clicked_square:
+            # Extract the destination square in UCI format (e.g., "e4")
+            destination_square_uci = uci_move[2:4]
+            file_char = destination_square_uci[0]  # e.g., "e"
+            rank_char = destination_square_uci[1]  # e.g., "4"
+            
+            # Convert the file (char) to an index (0-7)
+            file_index = ord(file_char) - ord('a')  # 'a' -> 0, 'b' -> 1, ..., 'h' -> 7
+            
+            # Convert the rank (char) to an integer (1 -> 0, 2 -> 1, ..., 8 -> 7)
+            rank_index = 8 - int(rank_char)  # "1" -> 0, "2" -> 1, ..., "8" -> 7
+                        
+            # Use chess.square to convert (file_index, rank_index) to the square index
+            destination_square = chess.square(rank_index, file_index)
+            
+            legal_moves.append(destination_square)
+    return legal_moves
 
 # Function to display the board in Tkinter
 def display_board():
-    # Clear the canvas
-    
-    canvas.delete("all")
-    square_size = 50
+    global highlighted_legal_moves
+    square_size = 80
     for row in range(8):
         for col in range(8):
             # Determine the color of the square
@@ -333,7 +396,20 @@ def display_board():
             canvas.create_rectangle(col * square_size, row * square_size,
                                     (col + 1) * square_size, (row + 1) * square_size,
                                     fill=color)
-            
+
+            # Highlight the selected square if it matches
+            if highlighted_square == (row, col):
+                canvas.create_rectangle(col * square_size, row * square_size,
+                                        (col + 1) * square_size, (row + 1) * square_size,
+                                        outline="red", width=3)  # Red border for selected square
+
+            # Highlight the legal moves (blue border)
+            if chess.square(row, col) in highlighted_legal_moves:
+                print(f"Legal move found: {chess.square(row, 7 - col)}")
+                canvas.create_rectangle(col * square_size, row * square_size,
+                                        (col + 1) * square_size, (row + 1) * square_size,
+                                        outline="blue", width=2)  # Blue border for legal moves
+
             # Get the piece at the current square
             piece = board.piece_at(chess.square(col, 7 - row))  # Flip y-axis for correct orientation
             if piece:
@@ -344,40 +420,22 @@ def display_board():
                     piece_char = black_pieces.get(piece.piece_type, "")
                 canvas.create_text(col * square_size + square_size / 2,
                                    row * square_size + square_size / 2,
-                                   text=piece_char, font=("Arial", 24))
+                                   text=piece_char, font=("Times New Roman", 36))
 
     # Draw row labels (1-8) on the left side of the board
     for row in range(8):
-        canvas.create_text(-10, row * square_size + square_size / 2,
-                           text=str(8 - row), font=("Arial", 14))  # 8-1, 7-2, ..., 1-8
+        canvas.create_text(8 * square_size + 10, row * square_size + square_size / 2,  # Right side positioning
+                           text=str(8 - row), font=("Times New Roman", 14))
 
     # Draw column labels (a-h) at the bottom of the board
     for col in range(8):
         canvas.create_text(col * square_size + square_size / 2,
                            8 * square_size + 10,  # Position below the board
-                           text=chr(ord('a') + col), font=("Arial", 14))
-    
-    plot_results()
+                           text=chr(ord('a') + col), font=("Times New Roman", 14))
+
+    canvas.bind("<Button-1>", on_click)
 
 
-def display_title():
-    # Clear the canvas
-    canvas.delete("all")
-    
-    # Add the title text at the top of the canvas
-    canvas.create_text(200, 50, text="Welcome to Chess!", font=("Arial", 24, "bold"), fill="black")
-
-    # Add a description text below the title
-    description = (
-        "Choose a game mode to start: \n\n"
-        "1. Player vs Player\n"
-        "2. Player vs RLAI\n"
-        "3. RLAI vs RLAI"
-    )
-    canvas.create_text(200, 150, text=description, font=("Arial", 14), fill="black", justify="center")
-    
-    # Ensure canvas updates
-    root.update()  # This forces an update of the canvas and GUI elements
 
 
 # Function to handle a player's move from the console
