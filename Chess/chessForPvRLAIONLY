@@ -323,10 +323,12 @@ def plot_results():
 highlighted_square = None  # Global variable to track highlighted square
 highlighted_legal_moves = []           # List to store legal moves for the selected piece
 
-# Function to handle click events
+uci_click = ""
+firstClick = True  # Boolean to track first click
+
 # Function to handle click events
 def on_click(event):
-    global highlighted_square, highlighted_legal_moves  # Access global variables
+    global highlighted_square, highlighted_legal_moves, firstClick, uci_click  # Access global variables
 
     # Calculate the row and column of the clicked square
     col = event.x // 80
@@ -336,22 +338,51 @@ def on_click(event):
     chess_col = chr(col + 97)  # Convert column to letter ('a' to 'h')
     chess_row = 8 - row        # Convert row to number ('1' to '8')
     clicked_square = chess_col + str(chess_row)
+    square = chess.square(8-row, col)  # square index in the board
+    
 
     # Print the chessboard notation (e.g., "a1", "h8") for debugging
     print(f"Clicked on square: {clicked_square}")
+    print(f"Square index: {square}")
 
-    # If a piece is selected, calculate its legal moves
+    # Check if there's a piece on the clicked square
     piece = board.piece_at(chess.square(col, 7 - row))
-    
-    if piece:
-        if highlighted_square == (row, col):
-            # If the same square is clicked again, deselect the piece and clear legal moves
-            highlighted_square = None
-            highlighted_legal_moves = []  # Clear highlighted legal moves
-        else:
-            # If a new piece is selected, update highlighted square and legal moves
-            highlighted_square = (row, col)
+
+    # If it's the first click and the user selects a piece
+    if firstClick:
+        if piece:
+            # Get legal moves for the clicked square (if it's a piece)
             highlighted_legal_moves = get_legal_moves(board, clicked_square)
+            highlighted_square = (row, col)  # Highlight the selected piece's position
+
+            # Debugging: Check if the highlighted_legal_moves is being populated
+            print(f"Highlighted legal moves: {highlighted_legal_moves}")
+            uci_click = clicked_square
+            print("uci clicked = ", uci_click)
+            # After the first click, switch to second click mode
+            firstClick = False
+        else:
+            print("No piece at clicked square. Please select a piece.")
+    
+    else:
+        # If it's the second click, check if the square is a legal move
+        print(highlighted_legal_moves)
+        if square in highlighted_legal_moves:
+            print("Legal move found!")
+            uci_click += clicked_square
+            print("uci clicked = ", uci_click)
+            make_move(uci_click)  # Execute the move (you'll need to define make_move)
+            firstClick = True   
+            uci_click = ""
+            highlighted_square = None
+            highlighted_legal_moves = []
+            # Reset to first click mode after move
+        else:
+            print("Clicked on an invalid square or no piece to move. Clicked on:" + str(square))
+            # Optionally, reset the highlighted square and legal moves
+            highlighted_square = None
+            highlighted_legal_moves = []
+            firstClick = True  # Go back to selecting a new piece
 
     # Redraw the board with the updated highlighted square and legal moves
     canvas.delete("all")  # Clear the canvas
@@ -384,6 +415,7 @@ def get_legal_moves(board, clicked_square):
             
             legal_moves.append(destination_square)
     return legal_moves
+
 
 # Function to display the board in Tkinter
 def display_board():
