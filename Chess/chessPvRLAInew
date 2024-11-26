@@ -537,6 +537,7 @@ def play_pvrla():
         if board.turn == chess.WHITE:
             print("White Player's Turn")
             canvas.bind("<Button-1>", on_click)
+            root.wait_variable(board.turn)
             root.after(20)  # Non-blocking way to add a delay for viewing purposes
         elif board.turn == chess.BLACK:
             print("Black AI's Turn")
