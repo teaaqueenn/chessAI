@@ -329,15 +329,17 @@ firstClick = True  # Boolean to track first click
 def on_click(event):
     global highlighted_square, highlighted_legal_moves, firstClick, uci_click, turn  # Access global variables
 
-    # Calculate the row and column of the clicked square
+    # Calculate the row and column of the clicked square based on the canvas click
     col = event.x // 80
     row = event.y // 80
 
-    # Convert to chess notation (e.g., "a1", "h8")
+    # Convert to chess notation (e.g., "a1", "h8") based on the reversed orientation
     chess_col = chr(col + 97)  # Convert column to letter ('a' to 'h')
-    chess_row = 8 - row        # Convert row to number ('1' to '8')
+    chess_row = 8 - row        # Convert row to number ('1' to '8') based on flipped orientation
     clicked_square = chess_col + str(chess_row)
-    square = chess.square(8-row, col)  # square index in the board
+    
+    # Adjust row index to account for the new orientation
+    square = chess.square(7 - row, col)  # Adjust to the reversed orientation: 7-row instead of row
     
 
     # Print the chessboard notation (e.g., "a1", "h8") for debugging
@@ -365,7 +367,7 @@ def on_click(event):
     
     else:
         # If it's the second click, check if the square is a legal move
-        print(highlighted_legal_moves)
+        print("legal moves array: ", highlighted_legal_moves)
         if square in highlighted_legal_moves:
             print("Legal move found!")
             uci_click += clicked_square
@@ -389,6 +391,7 @@ def on_click(event):
     canvas.delete("all")  # Clear the canvas
     display_board()        # Redraw the board with updated highlights
 
+
 # Function to get legal moves for a given square (in UCI notation)
 def get_legal_moves(board, clicked_square):
     legal_moves = []
@@ -406,15 +409,16 @@ def get_legal_moves(board, clicked_square):
             rank_char = destination_square_uci[1]  # e.g., "4"
             
             # Convert the file (char) to an index (0-7)
-            file_index = ord(file_char) - ord('a')  # 'a' -> 0, 'b' -> 1, ..., 'h' -> 7
+            file_index = ord(file_char) - 97  # 'a' -> 0, 'b' -> 1, ..., 'h' -> 7
             
             # Convert the rank (char) to an integer (1 -> 0, 2 -> 1, ..., 8 -> 7)
             rank_index = 7 - int(rank_char)  # "1" -> 0, "2" -> 1, ..., "8" -> 7
                         
             # Use chess.square to convert (file_index, rank_index) to the square index
-            destination_square = chess.square(rank_index, file_index)
+            destination_square = chess.square(file_index, rank_index)
             
             legal_moves.append(destination_square)
+    
     return legal_moves
 
 
@@ -437,8 +441,8 @@ def display_board():
                                         outline="red", width=3)  # Red border for selected square
 
             # Highlight the legal moves (blue border)
-            if chess.square(row-1, col) in highlighted_legal_moves:
-                print(f"Legal move found: {chess.square(row, 7 - col)}")
+            if chess.square(col, 7- row) in highlighted_legal_moves:
+                print(f"Legal move found: {chess.square(col, 7 - row)}")
                 canvas.create_rectangle(col * square_size, row * square_size,
                                         (col + 1) * square_size, (row + 1) * square_size,
                                         outline="blue", width=2)  # Blue border for legal moves
@@ -454,6 +458,12 @@ def display_board():
                 canvas.create_text(col * square_size + square_size / 2,
                                    row * square_size + square_size / 2,
                                    text=piece_char, font=("Times New Roman", 36))
+
+            # Display the square number (0 to 63) in the center of the square
+            square_number = chess.square(col, 7 - row)  # Get the square number from (col, row)
+            canvas.create_text(col * square_size + square_size / 2,
+                               row * square_size + square_size / 2,
+                               text=str(square_number), font=("Times New Roman", 12, "bold"), fill="black")
 
     # Draw row labels (1-8) on the left side of the board
     for row in range(8):

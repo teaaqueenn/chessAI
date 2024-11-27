@@ -454,6 +454,12 @@ def display_board():
                 canvas.create_text(col * square_size + square_size / 2,
                                    row * square_size + square_size / 2,
                                    text=piece_char, font=("Times New Roman", 36))
+            
+            # Display the square number (0 to 63) in the center of the square
+            square_number = chess.square(col, 7 - row)  # Get the square number from (col, row)
+            canvas.create_text(col * square_size + square_size / 2,
+                               row * square_size + square_size / 2,
+                               text=str(square_number), font=("Times New Roman", 12, "bold"), fill="black")
 
     # Draw row labels (1-8) on the left side of the board
     for row in range(8):
