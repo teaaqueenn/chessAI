@@ -336,10 +336,15 @@ def on_click(event):
     # Convert to chess notation (e.g., "a1", "h8") based on the reversed orientation
     chess_col = chr(col + 97)  # Convert column to letter ('a' to 'h')
     chess_row = 8 - row        # Convert row to number ('1' to '8') based on flipped orientation
-    clicked_square = chess_col + str(chess_row)
+    clicked_square = chess_col + str(chess_row)   
+    # Convert the file (char) to an index (0-7)
+    file_index = ord(chess_col) - 97  # 'a' -> 0, 'b' -> 1, ..., 'h' -> 7
     
-    # Adjust row index to account for the new orientation
-    square = chess.square(7 - row, col)  # Adjust to the reversed orientation: 7-row instead of row
+    # Convert the rank (char) to an integer (1 -> 0, 2 -> 1, ..., 8 -> 7)
+    rank_index = int(chess_row) - 1  # "1" -> 0, "2" -> 1, ..., "8" -> 7
+                
+    # Use chess.square to convert (file_index, rank_index) to the square index
+    square = chess.square(file_index, rank_index)
     
 
     # Print the chessboard notation (e.g., "a1", "h8") for debugging
@@ -379,6 +384,11 @@ def on_click(event):
             highlighted_legal_moves = []
             turn.set(1)
             # Reset to first click mode after move
+        elif piece:
+            print("Clicked on a piece: " + str(piece) + ". At index: " + str(square) + ". Clicked on:" + clicked_square)
+            highlighted_square = None
+            highlighted_legal_moves = []
+            firstClick = True  # Go back to selecting a new piece
         else:
             print("Clicked on an invalid square or no piece to move. Clicked on:" + str(square))
             # Optionally, reset the highlighted square and legal moves
@@ -408,14 +418,18 @@ def get_legal_moves(board, clicked_square):
             file_char = destination_square_uci[0]  # e.g., "e"
             rank_char = destination_square_uci[1]  # e.g., "4"
             
-            # Convert the file (char) to an index (0-7)
+            print("possible destination_square_uci: ", destination_square_uci)
+            
+                        # Convert the file (char) to an index (0-7)
             file_index = ord(file_char) - 97  # 'a' -> 0, 'b' -> 1, ..., 'h' -> 7
             
             # Convert the rank (char) to an integer (1 -> 0, 2 -> 1, ..., 8 -> 7)
-            rank_index = 7 - int(rank_char)  # "1" -> 0, "2" -> 1, ..., "8" -> 7
+            rank_index = int(rank_char) - 1  # "1" -> 0, "2" -> 1, ..., "8" -> 7
                         
             # Use chess.square to convert (file_index, rank_index) to the square index
             destination_square = chess.square(file_index, rank_index)
+
+            print("possible destination: ", destination_square)
             
             legal_moves.append(destination_square)
     
