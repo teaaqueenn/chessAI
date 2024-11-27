@@ -19,10 +19,20 @@ from tkinter import simpledialog
 GREEN = f'#395631'
 BEIGE = f'#d1b281'
 
-global game_numbers
+
 game_numbers = []
 total_rewards = []
 losses = []
+white_wins = 0
+black_wins = 0
+stalemates = 0
+highlighted_square = None  # Global variable to track highlighted square
+highlighted_legal_moves = []           # List to store legal moves for the selected piece
+
+uci_click = ""
+firstClick = True  # Boolean to track first click
+
+game_number = 1
 
 # Initialize the chess board
 board = chess.Board()
@@ -298,34 +308,39 @@ class ChessRLAI:
 
 
 def plot_results():
+    """
+    Creates a 1x2 grid of subplots:
+    - First subplot: Total Reward vs Game Number
+    - Second subplot: Pie chart for black wins, white wins, and stalemates (only if count > 0)
+    """
     global white_wins, black_wins, stalemates, game_numbers, total_rewards, losses
+    
+    # Create a 1x2 grid of subplots
+    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # First subplot: Total Reward vs Game Number
+    ax[0].plot(game_numbers, total_rewards, label="Total Reward", color='b')
+    ax[0].set_xlabel("Game Number")
+    ax[0].set_ylabel("Total Reward")
+    ax[0].set_title("Total Reward vs Game Number")
+    ax[0].grid(True)
+    
+    # Second subplot: Pie chart for black wins, white wins, and stalemates
+    pie_data = [black_wins, white_wins, stalemates]
+    labels = ['Black Wins', 'White Wins', 'Stalemates']
+    
+    # Only plot the pie chart if any value > 0
+    if any(count > 0 for count in pie_data):
+        ax[1].pie(pie_data, labels=labels, autopct='%1.1f%%', startangle=90, colors=['black', 'white', 'gray'])
+        ax[1].set_title("Black Wins vs White Wins vs Stalemates")
+    else:
+        ax[1].text(0.5, 0.5, 'No data to plot', ha='center', va='center', fontsize=12)
 
-    # Create a 1x2 grid of subplots (1 row, 2 columns)
-    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(14, 6))  # Adjusted figsize to fit two subplots
-
-    # Plot Total Reward vs Game Number (First subplot - Left)
-    axs[0].plot(game_numbers, total_rewards, color='b', label='Total Rewards')  # Line plot for total rewards
-    axs[0].scatter(game_numbers, losses, color='r', label='Losses')  # Scatter plot for losses
-    axs[0].set(xlabel='Game Number', ylabel='Total Reward / Losses', title='Game Number vs Total Reward and Losses')
-    axs[0].grid(True)
-    axs[0].legend()  # Show legend for both line and scatter
-
-    # Pie chart (Second subplot - Right)
-    axs[1].pie([white_wins, black_wins, stalemates], labels=['White Wins', 'Black Wins', 'Stalemates'],
-               autopct='%1.1f%%', startangle=90)
-    axs[1].set_title('Game Results')
-
-    # Adjust layout to make sure there's no overlap
+    # Adjust layout to avoid overlap
     plt.tight_layout()
 
     # Show the plot
     plt.show()
-
-highlighted_square = None  # Global variable to track highlighted square
-highlighted_legal_moves = []           # List to store legal moves for the selected piece
-
-uci_click = ""
-firstClick = True  # Boolean to track first click
 
 # Function to handle click events
 def on_click(event):
@@ -487,6 +502,7 @@ def display_board():
         canvas.create_text(col * square_size + square_size / 2,
                            8 * square_size + 10,  # Position below the board
                            text=chr(ord('a') + col), font=("Times New Roman", 14))
+        
 
 
 def makePlayerMove(move_uci):
@@ -577,10 +593,7 @@ def print_board_tensor():
     print("Tensor shape:", tensor.shape)
     print(tensor)
 
-game_number = 1
-
 rla_agent = ChessRLAI(model=DQN())
-
 turn = tk.IntVar(value=0)
 
 # Function to handle the Player vs RLAI mode
@@ -661,10 +674,6 @@ def play_pvrla():
 
     board.set_board_fen(chess.STARTING_BOARD_FEN)
     start_game()
-
-white_wins = 0
-black_wins = 0
-stalemates = 0
 
 
 
