@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from matplotlib import figure
 from matplotlib import pyplot
 import copy
+from tkinter import simpledialog
 
 
 
@@ -230,6 +231,7 @@ class ChessRLAI:
         if rand_val < self.epsilon:
             # Explore: Choose a random legal move
             best_move = random.choice(legal_moves)
+            print("using random vals")
         else:
             print("using q-vals")
 
@@ -377,7 +379,7 @@ def on_click(event):
             print("Legal move found!")
             uci_click += clicked_square
             print("uci clicked = ", uci_click)
-            make_move(uci_click)  # Execute the move 
+            makePlayerMove(uci_click)  # Execute the move 
             firstClick = True   
             uci_click = ""
             highlighted_square = None
@@ -418,8 +420,6 @@ def get_legal_moves(board, clicked_square):
             file_char = destination_square_uci[0]  # e.g., "e"
             rank_char = destination_square_uci[1]  # e.g., "4"
             
-            print("possible destination_square_uci: ", destination_square_uci)
-            
                         # Convert the file (char) to an index (0-7)
             file_index = ord(file_char) - 97  # 'a' -> 0, 'b' -> 1, ..., 'h' -> 7
             
@@ -428,8 +428,6 @@ def get_legal_moves(board, clicked_square):
                         
             # Use chess.square to convert (file_index, rank_index) to the square index
             destination_square = chess.square(file_index, rank_index)
-
-            print("possible destination: ", destination_square)
             
             legal_moves.append(destination_square)
     
@@ -491,7 +489,43 @@ def display_board():
                            text=chr(ord('a') + col), font=("Times New Roman", 14))
 
 
-
+def makePlayerMove(move_uci):
+    global board
+    try:
+        # Apply the move using UCI notation
+        move = chess.Move.from_uci(move_uci)
+        piece = board.piece_at(move.from_square)
+        # Check for promotion
+        if piece and piece.piece_type == chess.PAWN and \
+            ((move.to_square < 65 and move.to_square > 55) or (move.to_square < 8 and move.to_square > -1)):  
+            # Pawn moved to promotion rank (1st or 8th rank)
+            print("promoting")
+            
+            # Ask for promotion choice using Tkinter dialog
+            root = tk.Tk()
+            root.withdraw()  # Hide the main window
+            promotion_choice = simpledialog.askstring("Pawn Promotion", 
+                                                      "Promote to (Q [Queen], R [Rook], B [Bishop], N [Knight]):", 
+                                                      parent=root)
+            # Map promotion choice to the correct piece type
+            piece_map = {'Q': chess.QUEEN, 'R': chess.ROOK, 'B': chess.BISHOP, 'N': chess.KNIGHT}
+            
+            if promotion_choice in piece_map:  # Validate input
+                promotion_piece = piece_map[promotion_choice]  # Get the piece type constant
+                print("promotion piece: ", promotion_piece)
+                
+                # Create the promoted move
+                move = chess.Move(move.from_square, move.to_square, promotion=promotion_piece)
+                print("new promotion move: ", move)
+                print(f"Pawn promoting to {promotion_choice}")
+        if move in board.legal_moves:
+            board.push(move)
+            print(f"Move made: {move_uci}")
+            display_board()
+        else:
+            print("Invalid move!")
+    except ValueError:
+        print("Invalid UCI format or move.")
 
 # Function to handle a player's move from the console
 def make_move(move_uci):
@@ -551,6 +585,7 @@ turn = tk.IntVar(value=0)
 
 # Function to handle the Player vs RLAI mode
 def play_pvrla():
+    global game_number
     print("play_pvrla started")
     while not board.is_game_over():
         print("turn before display_board: ", turn.get())
