@@ -21,18 +21,27 @@ BEIGE = f'#d1b281'
 
 
 game_numbers = []
+game_numbers.append(0.0)
 total_rewards = []
-losses = []
+sum_rewards = []
+sum_rewards.append(0.0)
+turn_numbers =[]
+turn_number = 0.0
 white_wins = 0
 black_wins = 0
 stalemates = 0
 highlighted_square = None  # Global variable to track highlighted square
 highlighted_legal_moves = []           # List to store legal moves for the selected piece
 
+fig = None
+ax = None
+
 uci_click = ""
 firstClick = True  # Boolean to track first click
 
 game_number = 1
+
+plt.ion()
 
 # Initialize the chess board
 board = chess.Board()
@@ -164,6 +173,7 @@ class ChessRLAI:
         self.gamma = gamma  # Discount factor for future rewards
 
         self.total_reward = 0.0
+        self.sum_reward = 0.0
         self.total_loss = 0.0
 
 
@@ -242,6 +252,7 @@ class ChessRLAI:
             # Explore: Choose a random legal move
             best_move = random.choice(legal_moves)
             print("using random vals")
+            self.total_reward += self.reward_of_move(best_move, board)
         else:
             print("using q-vals")
 
@@ -300,6 +311,8 @@ class ChessRLAI:
                 # Track cumulative reward (this should be done only after best_move is assigned)
                 self.total_reward += self.reward_of_move(best_move, board)
 
+                self.sum_reward += self.reward_of_move(best_move, board)
+
         # Decay epsilon after each move
         self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
 
@@ -309,38 +322,60 @@ class ChessRLAI:
 
 def plot_results():
     """
-    Creates a 1x2 grid of subplots:
-    - First subplot: Total Reward vs Game Number
+    Creates or updates a 1x3 grid of subplots:
+    - First subplot: Total Reward vs Game Number with losses
     - Second subplot: Pie chart for black wins, white wins, and stalemates (only if count > 0)
+    - Third subplot: Total Reward vs Turns
     """
-    global white_wins, black_wins, stalemates, game_numbers, total_rewards, losses
+    global white_wins, black_wins, stalemates, game_numbers, total_rewards, losses, fig, ax
     
-    # Create a 1x2 grid of subplots
-    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
-    
-    # First subplot: Total Reward vs Game Number
-    ax[0].plot(game_numbers, total_rewards, label="Total Reward", color='b')
-    ax[0].set_xlabel("Game Number")
-    ax[0].set_ylabel("Total Reward")
-    ax[0].set_title("Total Reward vs Game Number")
-    ax[0].grid(True)
-    
-    # Second subplot: Pie chart for black wins, white wins, and stalemates
-    pie_data = [black_wins, white_wins, stalemates]
-    labels = ['Black Wins', 'White Wins', 'Stalemates']
-    
-    # Only plot the pie chart if any value > 0
-    if any(count > 0 for count in pie_data):
-        ax[1].pie(pie_data, labels=labels, autopct='%1.1f%%', startangle=90, colors=['black', 'white', 'gray'])
-        ax[1].set_title("Black Wins vs White Wins vs Stalemates")
-    else:
-        ax[1].text(0.5, 0.5, 'No data to plot', ha='center', va='center', fontsize=12)
+    # Create a 1x3 grid of subplots if not created yet
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(1, 3, figsize=(15, 5))
 
-    # Adjust layout to avoid overlap
+    print("game numbers array: ", game_numbers)
+    print("turn numbers array: ", turn_numbers)
+    print("total rewards array: ", total_rewards)
+    print("sum rewards array: ", sum_rewards)
+    
+    # First subplot: Total Reward vs Turns
+    ax[0].cla()  # Clear the first subplot
+    ax[0].plot(turn_numbers, total_rewards, marker='o', color='b', label="Total Reward")
+    ax[0].set_title("Total Reward vs Turns")
+    ax[0].set_xlabel("Turns")
+    ax[0].set_ylabel("Total Reward")
+    ax[0].grid(True)
+    ax[0].legend()
+
+    # Second subplot: Pie chart for black wins, white wins, and stalemates (only if count > 0)
+    total_games = white_wins + black_wins + stalemates
+    ax[1].cla()  # Clear the second subplot
+    if total_games > 0:
+        labels = ['White Wins', 'Black Wins', 'Stalemates']
+        colors = ['#FF9999', '#66B2FF', '#99FF99']  # Different colors for each slice
+        sizes = [white_wins, black_wins, stalemates]
+        ax[1].pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
+        ax[1].axis('equal')  # Equal aspect ratio ensures the pie chart is circular
+        ax[1].set_title("Game Outcome Distribution")
+
+    # Third subplot: Total Reward vs Game Number (without losses scatter)
+    ax[2].cla()  # Clear the third subplot
+    
+    # Third subplot: plot total rewards vs game numbers
+    ax[2].plot(game_numbers, sum_rewards, marker='o', color='g', label="Total Reward")
+    ax[2].set_title("Total Reward vs Game Number")
+    ax[2].set_xlabel("Game Number")
+    ax[2].set_ylabel("Total Reward")
+    ax[2].grid(True)
+    ax[2].legend()
+
     plt.tight_layout()
 
-    # Show the plot
-    plt.show()
+    # Update the plot
+    plt.draw()
+    plt.pause(0.1)  # Pause to allow the plot to update
+
+
 
 # Function to handle click events
 def on_click(event):
@@ -598,7 +633,7 @@ turn = tk.IntVar(value=0)
 
 # Function to handle the Player vs RLAI mode
 def play_pvrla():
-    global game_number
+    global game_number, stalemates, white_wins, black_wins, game_numbers, total_rewards, losses, turn_numbers, turn_number
     print("play_pvrla started")
     while not board.is_game_over():
         print("turn before display_board: ", turn.get())
@@ -621,6 +656,10 @@ def play_pvrla():
             print("Turn after setting to Black: ", turn.get()) 
             root.update_idletasks()  # Force UI updates
             root.after(100)  # Add a small delay to ensure the turn is updated
+            turn_number += 1
+            turn_numbers.append(turn_number)
+            total_rewards.append(rla_agent.total_reward)
+            plot_results()
             print("turn after setting to Black: ", turn.get())
 
         elif turn.get() == 1:  # Black AI's Turn
@@ -637,6 +676,10 @@ def play_pvrla():
                 display_board()  # Ensure the board is redrawn after the move
                 root.update_idletasks()  # Force UI updates
                 root.after(20)  # Non-blocking way to add a delay for viewing purposes
+                turn_number += 1
+                turn_numbers.append(turn_number)
+                total_rewards.append(rla_agent.total_reward)
+                plot_results()
             else:
                 continue
 
@@ -645,10 +688,9 @@ def play_pvrla():
         # Introduce a small delay for better viewing of the moves
         root.after(20)  # Non-blocking way to add a delay for viewing purposes
 
-    # After the game ends, record total reward and loss
     game_numbers.append(game_number)
-    total_rewards.append(rla_agent.total_reward)
-    losses.append(rla_agent.total_loss)
+    sum_rewards.append(rla_agent.sum_reward)
+    rla_agent.sum_reward = 0.0
 
 
     # Once the game is over, print the result
