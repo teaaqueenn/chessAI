@@ -25,7 +25,11 @@ game_numbers.append(0.0)
 total_rewards = []
 sum_rewards = []
 sum_rewards.append(0.0)
+turn_rewards = []
 turn_numbers =[]
+average_game_q_values = []
+average_game_q_values.append(0.0)
+turn_q_values = []
 turn_number = 0.0
 white_wins = 0
 black_wins = 0
@@ -94,10 +98,10 @@ class DQN(nn.Module):
         self.fc17 = nn.Linear(16, 8)            # Seventeenth hidden layer with 8 units
         self.fc18 = nn.Linear(8, 8)             # Eighteenth hidden layer with 8 units
         self.fc19 = nn.Linear(8, 4)             # Nineteenth hidden layer with 4 units
-        self.fc20 = nn.Linear(4, 4672)          # Twentieth hidden layer (output) with 4672 units (for possible moves)
+        self.fc20 = nn.Linear(4, 4672)  # Output layer with 4672 units (for possible moves)
 
         # Dropout layer to prevent overfitting (applied after each hidden layer)
-        self.dropout = nn.Dropout(0.3)  # Dropout with 50% probability of zeroing out inputs
+        self.dropout = nn.Dropout(0.3)  # Dropout with 30% probability of zeroing out inputs
 
     def forward(self, x):
         # Passing the input through all the layers with ReLU activation
@@ -155,12 +159,8 @@ class DQN(nn.Module):
         x = torch.relu(self.fc18(x))
         x = self.dropout(x)
 
-        x = torch.relu(self.fc19(x))
-        x = self.dropout(x)
-
-        # Output layer (no activation function here, raw Q-values)
-        x = self.fc20(x)
-
+        x = self.fc19(x)  # No activation for the last hidden layer
+        x = self.fc20(x)  # Output layer with dynamic action space size
         return x
 
 
@@ -177,6 +177,7 @@ class ChessRLAI:
         self.total_reward = 0.0
         self.sum_reward = 0.0
         self.total_loss = 0.0
+        self.turn_reward = 0.0
 
     def is_fork(self, board, square):
         """
@@ -195,31 +196,6 @@ class ChessRLAI:
         
         # If two or more opponent pieces are attacked, it's a fork
         return len(attacked_pieces) >= 2
-
-    def is_pin(self, board, square):
-        """
-        Check if the piece at `square` is pinned to a more valuable piece (e.g., the king).
-        A pin happens when a piece cannot move without exposing a more valuable piece to attack.
-        """
-        piece = board.piece_at(square)
-        if piece is None or piece.color != chess.BLACK:
-            return False
-
-        # Check all the possible directions (like a rook or queen move)
-        for direction in [chess.NORTH, chess.SOUTH, chess.EAST, chess.WEST, chess.NORTHEAST, chess.NORTHWEST, chess.SOUTHEAST, chess.SOUTHWEST]:
-            for offset in range(1, 8):  # Check up to 7 squares in the given direction
-                target_square = square + direction * offset
-                if not board.is_valid_square(target_square):
-                    break
-
-                target_piece = board.piece_at(target_square)
-                if target_piece and target_piece.color == chess.WHITE:
-                    # If an opponent piece is found, it's a potential pin
-                    return True
-                elif target_piece and target_piece.color == chess.BLACK:
-                    break  # The pin ends if another black piece is found
-
-        return False
 
     def is_double_attack(self, board, square):
         """
@@ -271,6 +247,23 @@ class ChessRLAI:
                         return True
         
         return False
+    
+    def is_piece_vulnerable(self, board, square):
+        # Determine which color is playing
+        color = board.turn
+        
+        # Iterate over all opponent's pieces
+        opponent_color = not color
+        for square in chess.SQUARES:
+            piece = board.piece_at(square)
+            if piece and piece.color == opponent_color:
+                # Check if the opponent can move to the target square
+                legal_moves = board.legal_moves
+                for move in legal_moves:
+                    if move.to_square == square:
+                        return True
+        return False
+
 
     def reward_of_move(self, move, board) -> float:
         """
@@ -357,7 +350,7 @@ class ChessRLAI:
         # Step 6: Threats and tactics (reward for tactical moves like forks, pins) with multipliers
         if self.is_fork(board_copy, move.to_square):
             reward += importance_scale["threats_and_tactics"] * 1.5  
-        if self.is_pin(board_copy, move.to_square):
+        if board.is_pinned(chess.BLACK, move.to_square):
             reward += importance_scale["threats_and_tactics"] * 1.0
         if self.is_double_attack(board_copy, move.to_square):
             reward += importance_scale["threats_and_tactics"] * 1.2
@@ -458,6 +451,15 @@ class ChessRLAI:
         if board_copy.is_check():
             reward += importance_scale["threats_and_tactics"] * 0.5  # Reward for counter-threats
 
+        
+        if self.is_piece_vulnerable(board_copy, move.to_square):
+            captured_piece = board_copy.piece_at(move.to_square)
+            if captured_piece:
+                piece_type = captured_piece.piece_type
+                reward -= importance_scale["material_gain_loss"] * piece_value.get(piece_type, 0.0) * 0.2
+
+        reward -= 0.05
+
         return reward
 
 
@@ -550,6 +552,11 @@ class ChessRLAI:
                 best_move = legal_moves[best_move_index]
 
                 # Track cumulative reward (this should be done only after best_move is assigned)
+
+                
+
+                self.turn_reward = self.reward_of_move(best_move, board)
+
                 self.total_reward += self.reward_of_move(best_move, board)
 
                 self.sum_reward += self.reward_of_move(best_move, board)
@@ -572,43 +579,53 @@ def plot_results():
     
     # Create a 1x3 grid of subplots if not created yet
     if fig is None or ax is None:
-        fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+        fig, ax = plt.subplots(2, 2, figsize=(15, 10)) 
 
     #print("game numbers array: ", game_numbers)
     print("turn numbers array: ", turn_numbers)
-    print("total rewards array: ", total_rewards)
+    #print("total rewards array: ", total_rewards)
     #print("game total rewards array: ", game_total_rewards)
+    print("turn rewards array: ", turn_rewards)
     
     # First subplot: Total Reward vs Turns
-    ax[0].cla()  # Clear the first subplot
-    ax[0].plot(turn_numbers, total_rewards, marker='o', color='b', label="Total Reward")
-    ax[0].set_title("Total Reward vs Turns")
-    ax[0].set_xlabel("Turns")
-    ax[0].set_ylabel("Total Reward")
-    ax[0].grid(True)
-    ax[0].legend()
+    ax[0, 0].cla()  # Clear the first subplot
+    ax[0, 0].plot(turn_numbers, total_rewards, marker='o', color='b', label="Total Reward")
+    ax[0, 0].set_title("Total Reward vs Turns")
+    ax[0, 0].set_xlabel("Turns")
+    ax[0, 0].set_ylabel("Total Reward")
+    ax[0, 0].grid(True)
+    ax[0, 0].legend()
+
+    # Fourth subplot: Turn Reward vs Turn Number
+    ax[0, 1].cla()  # Clear the fourth subplot
+    ax[0, 1].plot(turn_numbers, turn_rewards, marker='x', color='r', label="Turn Reward")
+    ax[0, 1].set_title("Turn Reward vs Turns")
+    ax[0, 1].set_xlabel("Turns")
+    ax[0, 1].set_ylabel("Turn Reward")
+    ax[0, 1].grid(True)
+    ax[0, 1].legend()
 
     # Second subplot: Pie chart for black wins, white wins, and stalemates (only if count > 0)
     total_games = white_wins + black_wins + stalemates
-    ax[1].cla()  # Clear the second subplot
+    ax[1, 0].cla()  # Clear the second subplot
     if total_games > 0:
         labels = ['White Wins', 'Black Wins', 'Stalemates']
         colors = ['#FF9999', '#66B2FF', '#99FF99']  # Different colors for each slice
         sizes = [white_wins, black_wins, stalemates]
-        ax[1].pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
-        ax[1].axis('equal')  # Equal aspect ratio ensures the pie chart is circular
-        ax[1].set_title("Game Outcome Distribution")
+        ax[1, 0].pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
+        ax[1, 0].axis('equal')  # Equal aspect ratio ensures the pie chart is circular
+        ax[1, 0].set_title("Game Outcome Distribution")
 
     # Third subplot: Total Reward vs Game Number (without losses scatter)
-    ax[2].cla()  # Clear the third subplot
+    ax[1, 1].cla()  # Clear the third subplot
     
     # Third subplot: plot total rewards vs game numbers
-    ax[2].plot(game_numbers, game_total_rewards, marker='o', color='g', label="Total Reward Difference per Game")
-    ax[2].set_title("Total Reward vs Game Number")
-    ax[2].set_xlabel("Game Number")
-    ax[2].set_ylabel("Total Reward")
-    ax[2].grid(True)
-    ax[2].legend()
+    ax[1, 1].plot(game_numbers, game_total_rewards, marker='o', color='g', label="Total Reward Difference per Game")
+    ax[1, 1].set_title("Total Reward vs Game Number")
+    ax[1, 1].set_xlabel("Game Number")
+    ax[1, 1].set_ylabel("Total Reward")
+    ax[1, 1].grid(True)
+    ax[1, 1].legend()
 
     plt.tight_layout()
 
@@ -916,6 +933,12 @@ def play_pvrla():
                 root.after(20)  # Non-blocking way to add a delay for viewing purposes
                 turn_number += 1
                 turn_numbers.append(turn_number)
+                if len(turn_rewards) == 0:
+                    turn_reward = rla_agent.total_reward
+                else:
+                    turn_reward = ((rla_agent.total_reward)-(total_rewards[-1]))
+                print("turn reward: ", turn_reward)
+                turn_rewards.append(turn_reward)
                 total_rewards.append(rla_agent.total_reward)
                 plot_results()
             else:
@@ -932,20 +955,6 @@ def play_pvrla():
     print("Game Over!")
     print(f"Result: {board.result()}")
 
-    result = board.result()
-    if result == "1-0":  # White wins
-        white_wins += 1
-        print("Player wins!")
-    elif result == "0-1":  # Black wins
-        black_wins += 1
-        print("AI wins!")
-    else:
-        stalemates += 1
-        print("It's a draw!")
-
-    print("white wins: ", white_wins)
-    print("black wins: ", black_wins)
-    print("stalemates: ", stalemates)
 
     current_game_total_reward = rla_agent.sum_reward  # Get the total reward for the current game
 
@@ -958,8 +967,26 @@ def play_pvrla():
         reward_difference = current_game_total_reward - last_game_total_reward  # Calculate the difference
         game_total_rewards.append(reward_difference)  # Store the difference in total rewards
 
+    result = board.result()
+    if result == "1-0":  # White wins
+        white_wins += 1
+        rla_agent.total_reward -= 100
+        print("Player wins!")
+    elif result == "0-1":  # Black wins
+        black_wins += 1
+        print("AI wins!")
+    else:
+        stalemates += 1
+        rla_agent.total_reward -= 30
+        print("It's a draw!")
+
+    print("white wins: ", white_wins)
+    print("black wins: ", black_wins)
+    print("stalemates: ", stalemates)
+
 
     board.set_board_fen(chess.STARTING_BOARD_FEN)
+    plot_results()
     start_game()
 
 
