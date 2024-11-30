@@ -41,8 +41,6 @@ ax = None
 uci_click = ""
 firstClick = True  # Boolean to track first click
 
-game_number = 0
-
 plt.ion()
 
 # Initialize the chess board
@@ -336,9 +334,9 @@ def plot_results():
         fig, ax = plt.subplots(1, 3, figsize=(15, 5))
 
     print("game numbers array: ", game_numbers)
-    print("turn numbers array: ", turn_numbers)
-    print("total rewards array: ", total_rewards)
-    print("sum rewards array: ", sum_rewards)
+    #print("turn numbers array: ", turn_numbers)
+    #print("total rewards array: ", total_rewards)
+    print("game total rewards array: ", game_total_rewards)
     
     # First subplot: Total Reward vs Turns
     ax[0].cla()  # Clear the first subplot
@@ -364,7 +362,7 @@ def plot_results():
     ax[2].cla()  # Clear the third subplot
     
     # Third subplot: plot total rewards vs game numbers
-    ax[2].plot(range(1, len(game_total_rewards) + 1), game_total_rewards, marker='o', color='g', label="Total Reward Difference per Game")
+    ax[2].plot(game_numbers, game_total_rewards, marker='o', color='g', label="Total Reward Difference per Game")
     ax[2].set_title("Total Reward vs Game Number")
     ax[2].set_xlabel("Game Number")
     ax[2].set_ylabel("Total Reward")
@@ -635,7 +633,7 @@ turn = tk.IntVar(value=0)
 
 # Function to handle the Player vs RLAI mode
 def play_pvrla():
-    global game_number, stalemates, white_wins, black_wins, game_numbers, total_rewards, losses, turn_numbers, turn_number
+    global stalemates, white_wins, black_wins, game_numbers, total_rewards, turn_numbers, turn_number
     print("play_pvrla started")
     while not board.is_game_over():
         print("turn before display_board: ", turn.get())
@@ -690,9 +688,7 @@ def play_pvrla():
         # Introduce a small delay for better viewing of the moves
         root.after(20)  # Non-blocking way to add a delay for viewing purposes
 
-    game_numbers.append(game_number)
-    game_total_rewards.append(rla_agent.sum_reward)
-
+    game_numbers.append(game_numbers[-1] + 1)
 
     # Once the game is over, print the result
     print("Game Over!")
@@ -712,8 +708,6 @@ def play_pvrla():
     print("white wins: ", white_wins)
     print("black wins: ", black_wins)
     print("stalemates: ", stalemates)
-
-    game_number += 1
 
     current_game_total_reward = rla_agent.sum_reward  # Get the total reward for the current game
 
