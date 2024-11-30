@@ -68,6 +68,8 @@ canvas.pack()
 import torch
 import torch.nn as nn
 
+
+
 class DQN(nn.Module):
     def __init__(self):
         super(DQN, self).__init__()
@@ -176,49 +178,288 @@ class ChessRLAI:
         self.sum_reward = 0.0
         self.total_loss = 0.0
 
+    def is_fork(self, board, square):
+        """
+        Check if the piece at `square` is performing a fork.
+        A fork happens when one piece attacks two or more pieces of the opponent.
+        """
+        piece = board.piece_at(square)
+        if piece is None or piece.color != chess.BLACK:
+            return False
+
+        # Get all attacked squares
+        attacked_squares = board.attacks(square)
+        
+        # Count how many opponent pieces are being attacked
+        attacked_pieces = [board.piece_at(sq) for sq in attacked_squares if board.piece_at(sq) and board.piece_at(sq).color == chess.WHITE]
+        
+        # If two or more opponent pieces are attacked, it's a fork
+        return len(attacked_pieces) >= 2
+
+    def is_pin(self, board, square):
+        """
+        Check if the piece at `square` is pinned to a more valuable piece (e.g., the king).
+        A pin happens when a piece cannot move without exposing a more valuable piece to attack.
+        """
+        piece = board.piece_at(square)
+        if piece is None or piece.color != chess.BLACK:
+            return False
+
+        # Check all the possible directions (like a rook or queen move)
+        for direction in [chess.NORTH, chess.SOUTH, chess.EAST, chess.WEST, chess.NORTHEAST, chess.NORTHWEST, chess.SOUTHEAST, chess.SOUTHWEST]:
+            for offset in range(1, 8):  # Check up to 7 squares in the given direction
+                target_square = square + direction * offset
+                if not board.is_valid_square(target_square):
+                    break
+
+                target_piece = board.piece_at(target_square)
+                if target_piece and target_piece.color == chess.WHITE:
+                    # If an opponent piece is found, it's a potential pin
+                    return True
+                elif target_piece and target_piece.color == chess.BLACK:
+                    break  # The pin ends if another black piece is found
+
+        return False
+
+    def is_double_attack(self, board, square):
+        """
+        Check if the piece at `square` is attacking two opponent pieces at the same time.
+        A double attack occurs when one piece attacks two opponent pieces simultaneously.
+        """
+        piece = board.piece_at(square)
+        if piece is None or piece.color != chess.BLACK:
+            return False
+
+        # Get all attacked squares
+        attacked_squares = board.attacks(square)
+        
+        # Count how many opponent pieces are being attacked
+        attacked_pieces = [board.piece_at(sq) for sq in attacked_squares if board.piece_at(sq) and board.piece_at(sq).color == chess.WHITE]
+        
+        # If two or more opponent pieces are attacked simultaneously, it's a double attack
+        return len(attacked_pieces) >= 2
+    
+    def is_back_rank_threat(self, board):
+        """
+        Check if there is a back rank threat against the opponent's king.
+        A back rank threat occurs when the opponent's king is on the back rank
+        and there is a potential check from a black piece (typically a rook or queen).
+        """
+        # Get the location of the white king (since we're checking for black's threat)
+        white_king_square = board.king(chess.WHITE)
+        
+        # Check if the white king is on the 1st rank (back rank for white)
+        if white_king_square not in chess.SQUARES[0:8]:  # First rank is 0-7 (row 1)
+            return False  # White king is not on the back rank
+        
+        # Check if the opponent's back rank is blocked or if there are escape squares
+        for square in chess.SQUARES[0:8]:
+            piece = board.piece_at(square)
+            if piece and piece.color == chess.WHITE:
+                # If there's a white piece on the back rank, the back rank is "blocked"
+                # and may provide a potential check from a black piece.
+                return True
+        
+        # If there's a black piece threatening the back rank (typically rooks or queens)
+        for square in chess.SQUARES[0:8]:
+            # Check if a black piece is on the same rank as the white king
+            piece = board.piece_at(square)
+            if piece and piece.color == chess.BLACK:
+                if piece.piece_type in [chess.ROOK, chess.QUEEN]:  # Corrected line
+                    # If a rook or queen is attacking on the back rank, it's a threat
+                    if board.is_check():
+                        return True
+        
+        return False
 
     def reward_of_move(self, move, board) -> float:
         """
-        Calculate the reward for a given move. The reward is based on:
-        - Material gain or loss
-        - Whether the move puts the opponent in check or checkmate
-        - 
-
-        Parameters:
-            move (chess.Move): The move to evaluate.
-            board (chess.Board): The current board state.
-
-        Returns:
-            float: The reward for the move.
+        Calculate the reward for a given move, considering both tactical motifs and material factors.
         """
         reward = 0.0
 
-        if board.is_capture(move) and move is not None:
-            captured_piece = board.piece_at(move.to_square)
-            # Assign positive reward for capturing a piece
+        # Define piece values for each type of piece (based on standard chess piece values)
+        piece_value = {
+            chess.PAWN: 1.0,
+            chess.KNIGHT: 3.0,
+            chess.BISHOP: 3.0,
+            chess.ROOK: 5.0,  # Adjusted value for rooks (standard: 5, but more dynamic based on board context)
+            chess.QUEEN: 9.0,
+            chess.KING: 0.0  # King does not have a direct value in terms of material
+        }
+
+        # Importance scale for different chess concepts (scaled from 1-10)
+        importance_scale = {
+            "material_gain_loss": 9.5,
+            "check_checkmate": 9.45,
+            "king_safety": 9.4,
+            "piece_development": 8.95,
+            "control_of_center": 8.9,
+            "threats_and_tactics": 8.85,
+            "pawn_structure": 8.75,
+            "piece_activity": 8.6,
+            "attacks_on_king": 8.55,
+            "rook_queen_activity": 8.5,
+            "pawn_breaks": 8.45,
+            "passed_pawns": 8.2,
+            "creating_plan": 8.15,
+            "knight_outposts": 8.1,
+            "piece_protection": 8.05,
+            "avoiding_hanging_pieces": 8.0,
+            "promotion_threats": 7.95,
+            "opposite_color_bishops": 7.75,
+            "back_rank_weaknesses": 7.6,
+            "isolated_pawns": 7.55,
+            "doubled_pawns": 7.5,
+            "connected_pawns": 7.4,
+            "backward_pawns": 7.3,
+            "weak_squares": 7.2,
+            "en_passant": 6.0
+        }
+
+        # Create a copy of the board to simulate the move
+        board_copy = board.copy()
+
+        # Step 1: Material gain or loss (scaled reward based on piece value)
+        if board_copy.is_capture(move):
+            captured_piece = board_copy.piece_at(move.to_square)
             if captured_piece:
                 piece_type = captured_piece.piece_type
-                # Assign value based on the piece captured
-                if piece_type == chess.PAWN:
-                    reward += 1.0
-                elif piece_type == piece_type == chess.BISHOP:
-                    reward += 3.0
-                elif piece_type == piece_type == chess.BISHOP:
-                    reward += 5.0
-                elif piece_type == chess.ROOK:
-                    reward += 7.0
-                elif piece_type == chess.QUEEN:
-                    reward += 9.0
+                reward += importance_scale["material_gain_loss"] * piece_value.get(piece_type, 0.0)
 
-        # Step 2: Check if the move results in check or checkmate
-        board.push(move)
-        if board.is_checkmate():
-            reward += 50  # Positive large reward for checkmate
-        elif board.is_check():
-            reward += 10  # Smaller positive reward for check
-        board.pop()
+        # Step 2: Check or checkmate (scaled reward)
+        board_copy.push(move)
+        if board_copy.is_checkmate():
+            reward += importance_scale["check_checkmate"]
+        elif board_copy.is_check():
+            reward += importance_scale["check_checkmate"] * 0.5  # Slightly smaller reward for check
+        board_copy.pop()
+
+        # Step 3: King safety (penalize if king becomes exposed)
+        if board_copy.is_check():
+            reward -= importance_scale["king_safety"] * 0.5  # Penalize for putting the king in check
+
+        # Step 4: Piece development (reward if piece is developed)
+        move_piece = board_copy.piece_at(move.from_square)
+        if move_piece:
+            piece_type = move_piece.piece_type
+            if piece_type == chess.PAWN:
+                if move.to_square in [chess.C3, chess.F3, chess.C6, chess.F6]:  # Example: central pawn pushes
+                    reward += importance_scale["piece_development"]
+            elif piece_type in [chess.KNIGHT, chess.BISHOP]:
+                if move.to_square in [chess.D3, chess.E3, chess.D6, chess.E6]:  # Example: key squares for piece development
+                    reward += importance_scale["piece_development"]
+
+        # Step 5: Control of the center (reward for controlling central squares)
+        if move.to_square in [chess.D4, chess.E4, chess.D5, chess.E5]:  # Example: controlling the center
+            reward += importance_scale["control_of_center"]
+
+        # Step 6: Threats and tactics (reward for tactical moves like forks, pins) with multipliers
+        if self.is_fork(board_copy, move.to_square):
+            reward += importance_scale["threats_and_tactics"] * 1.5  
+        if self.is_pin(board_copy, move.to_square):
+            reward += importance_scale["threats_and_tactics"] * 1.0
+        if self.is_double_attack(board_copy, move.to_square):
+            reward += importance_scale["threats_and_tactics"] * 1.2
+        if self.is_back_rank_threat(board_copy):
+            reward += importance_scale["threats_and_tactics"] * 0.5
+
+        if move_piece == chess.QUEEN:
+            if board_copy.is_check():  # Threatening the opponent's king with the queen
+                reward += importance_scale["threats_and_tactics"]
+
+        # Step 7: Pawn structure (penalize if structure is weakened)
+        if move_piece == chess.PAWN:
+            if board_copy.is_isolated(move.to_square):
+                reward -= importance_scale["pawn_structure"] * 0.5  # Penalize isolated pawns
+
+        # Step 8: Piece activity (reward if piece becomes more active)
+        if move_piece == chess.ROOK:
+            if move.to_square in [chess.D1, chess.E1, chess.D8, chess.E8]:  # Example: activating rooks
+                reward += importance_scale["rook_queen_activity"]
+
+        # Step 9: Attacks on the opponent's king (reward for attacking moves)
+        if board_copy.is_checkmate():
+            reward += importance_scale["attacks_on_king"]
+
+        # Step 10: Passed pawns (reward if the move advances a passed pawn)
+        if move_piece == chess.PAWN:
+            if board_copy.is_passed_pawn(move.to_square):
+                reward += importance_scale["passed_pawns"]
+
+        # Step 11: Creating a plan (reward for structured, purposeful moves)
+        if move_piece == chess.KNIGHT:
+            reward += importance_scale["creating_plan"]
+
+        # Step 12: Knight outposts (reward for placing knights on outposts)
+        if move_piece == chess.KNIGHT:
+            if move.to_square in [chess.D4, chess.E5, chess.D5, chess.E4]:
+                reward += importance_scale["knight_outposts"]
+
+        # Step 13: Piece protection (reward for moves that protect valuable pieces)
+        if move_piece in [chess.KNIGHT, chess.ROOK, chess.BISHOP]:
+            reward += importance_scale["piece_protection"]
+
+        # Step 14: Avoiding hanging pieces (penalize if a piece is left unprotected)
+        if move_piece in [chess.KNIGHT, chess.ROOK, chess.BISHOP, chess.QUEEN]:
+            if board_copy.is_hanging(move.to_square):
+                reward -= importance_scale["avoiding_hanging_pieces"]
+
+        # Step 15: Promotion threats (reward for advancing a pawn that threatens promotion)
+        if move_piece == chess.PAWN:
+            if move.to_square in [chess.A8, chess.H8]:
+                reward += importance_scale["promotion_threats"]
+
+        # Step 16: Opposite-color bishops (reward if there is a strategic imbalance created)
+        if move_piece == chess.BISHOP:
+            if board_copy.is_opposite_color_bishops():
+                reward += importance_scale["opposite_color_bishops"]
+
+        # Step 17: Back-rank weaknesses (penalize for leaving a back-rank weakness)
+        if move_piece == chess.PAWN:
+            if board_copy.is_back_rank_weak():
+                reward -= importance_scale["back_rank_weaknesses"]
+
+        # Step 18: Isolated pawns (penalize isolated pawns)
+        if move_piece == chess.PAWN:
+            if board_copy.is_isolated_pawn(move.to_square):
+                reward -= importance_scale["isolated_pawns"]
+
+        # Step 19: Doubled pawns (penalize for doubled pawns)
+        if move_piece == chess.PAWN:
+            if board_copy.is_doubled_pawn(move.to_square):
+                reward -= importance_scale["doubled_pawns"]
+
+        # Step 20: Connected pawns (reward for connected pawns)
+        if move_piece == chess.PAWN:
+            if board_copy.is_connected_pawn(move.to_square):
+                reward += importance_scale["connected_pawns"]
+
+        # Step 21: Backward pawns (penalize if move creates a backward pawn)
+        if move_piece == chess.PAWN:
+            if board_copy.is_backward_pawn(move.to_square):
+                reward -= importance_scale["backward_pawns"]
+
+        # Step 22: Weak squares (penalize if a weak square is created)
+        if move_piece in [chess.KNIGHT, chess.BISHOP, chess.ROOK]:
+            if board_copy.is_weak_square(move.to_square):
+                reward -= importance_scale["weak_squares"]
+
+        # Step 23: En passant capture (reward for en passant)
+        if board_copy.is_en_passant(move):
+            reward += importance_scale["en_passant"]
+
+        # Step 24: Attacking opponent’s weak piece (reward for attacking vulnerable pieces)
+        if move_piece in [chess.QUEEN, chess.ROOK, chess.KNIGHT]:
+            if board_copy.is_attacking_weak_piece(move.to_square):
+                reward += importance_scale["material_gain_loss"] * 0.75
+
+        # Step 25: Counter-attacks (reward for moves that create counter threats)
+        if board_copy.is_check():
+            reward += importance_scale["threats_and_tactics"] * 0.5  # Reward for counter-threats
 
         return reward
+
 
     def find_best_move_with_q_values(self, board, gamma=0.99, alpha=0.1):
         """
