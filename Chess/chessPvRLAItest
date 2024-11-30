@@ -277,6 +277,35 @@ class ChessRLAI:
         right_pawn = board.piece_at(right) if right is not None else None
         
         return (left_pawn is None or left_pawn.piece_type != chess.PAWN) and (right_pawn is None or right_pawn.piece_type != chess.PAWN)
+    
+    def is_passed_pawn(board, square, color):
+        # A passed pawn has no opponent pawns on the same or adjacent files
+        file = chess.square_file(square)
+        rank = chess.square_rank(square)
+        opponent_color = not color
+        
+        for rank_offset in range(-1, 2):
+            for file_offset in range(-1, 2):
+                target_square = chess.square(file + file_offset, rank + rank_offset)
+                if board.is_on_board(target_square):
+                    piece = board.piece_at(target_square)
+                    if piece and piece.color == opponent_color and piece.piece_type == chess.PAWN:
+                        return False  # There is an opposing pawn that can block
+        return True  # No opposing pawns can block
+
+    def is_hanging(board, square, color):
+        piece = board.piece_at(square)
+        if not piece:
+            return False
+        
+        # Check if the piece is under attack by an opponent piece
+        for target_square in chess.SQUARES:
+            if board.is_attacked_by(not color, target_square):
+                if board.piece_at(target_square).color != color:
+                    return True  # The piece is under attack
+        return False
+
+
 
 
     def reward_of_move(self, move, board) -> float:
@@ -391,7 +420,7 @@ class ChessRLAI:
 
         # Step 10: Passed pawns (reward if the move advances a passed pawn)
         if move_piece == chess.PAWN:
-            if board_copy.is_passed_pawn(move.to_square):
+            if self.is_passed_pawn(board_copy, move.to_square):
                 reward += importance_scale["passed_pawns"]
 
         # Step 11: Creating a plan (reward for structured, purposeful moves)
@@ -409,7 +438,7 @@ class ChessRLAI:
 
         # Step 14: Avoiding hanging pieces (penalize if a piece is left unprotected)
         if move_piece in [chess.KNIGHT, chess.ROOK, chess.BISHOP, chess.QUEEN]:
-            if board_copy.is_hanging(move.to_square):
+            if self.is_hanging(board_copy, move.to_square):
                 reward -= importance_scale["avoiding_hanging_pieces"]
 
         # Step 15: Promotion threats (reward for advancing a pawn that threatens promotion)
