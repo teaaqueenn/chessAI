@@ -265,6 +265,18 @@ class ChessRLAI:
                     if move.to_square == square:
                         return True
         return False
+    
+    def is_isolated(self, board, square):
+        # Check if a pawn on the square is isolated
+        file = chess.square_file(square)
+        # Check if there are pawns on the adjacent files
+        left = chess.square(file-1, chess.square_rank(square)) if file > 0 else None
+        right = chess.square(file+1, chess.square_rank(square)) if file < 7 else None
+        
+        left_pawn = board.piece_at(left) if left is not None else None
+        right_pawn = board.piece_at(right) if right is not None else None
+        
+        return (left_pawn is None or left_pawn.piece_type != chess.PAWN) and (right_pawn is None or right_pawn.piece_type != chess.PAWN)
 
 
     def reward_of_move(self, move, board) -> float:
@@ -365,7 +377,7 @@ class ChessRLAI:
 
         # Step 7: Pawn structure (penalize if structure is weakened)
         if move_piece == chess.PAWN:
-            if board_copy.is_isolated(move.to_square):
+            if self.is_isolated(board_copy,move.to_square):
                 reward -= importance_scale["pawn_structure"] * 0.5  # Penalize isolated pawns
 
         # Step 8: Piece activity (reward if piece becomes more active)
