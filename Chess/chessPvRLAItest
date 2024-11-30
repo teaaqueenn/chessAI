@@ -32,6 +32,8 @@ black_wins = 0
 stalemates = 0
 highlighted_square = None  # Global variable to track highlighted square
 highlighted_legal_moves = []           # List to store legal moves for the selected piece
+game_total_rewards = []  # List to store total rewards for each game
+game_total_rewards.append(0.0)
 
 fig = None
 ax = None
@@ -39,7 +41,7 @@ ax = None
 uci_click = ""
 firstClick = True  # Boolean to track first click
 
-game_number = 1
+game_number = 0
 
 plt.ion()
 
@@ -327,7 +329,7 @@ def plot_results():
     - Second subplot: Pie chart for black wins, white wins, and stalemates (only if count > 0)
     - Third subplot: Total Reward vs Turns
     """
-    global white_wins, black_wins, stalemates, game_numbers, total_rewards, losses, fig, ax
+    global white_wins, black_wins, stalemates, game_numbers, total_rewards, fig, ax
     
     # Create a 1x3 grid of subplots if not created yet
     if fig is None or ax is None:
@@ -362,7 +364,7 @@ def plot_results():
     ax[2].cla()  # Clear the third subplot
     
     # Third subplot: plot total rewards vs game numbers
-    ax[2].plot(game_numbers, sum_rewards, marker='o', color='g', label="Total Reward")
+    ax[2].plot(range(1, len(game_total_rewards) + 1), game_total_rewards, marker='o', color='g', label="Total Reward Difference per Game")
     ax[2].set_title("Total Reward vs Game Number")
     ax[2].set_xlabel("Game Number")
     ax[2].set_ylabel("Total Reward")
@@ -689,8 +691,7 @@ def play_pvrla():
         root.after(20)  # Non-blocking way to add a delay for viewing purposes
 
     game_numbers.append(game_number)
-    sum_rewards.append(rla_agent.sum_reward)
-    rla_agent.sum_reward = 0.0
+    game_total_rewards.append(rla_agent.sum_reward)
 
 
     # Once the game is over, print the result
@@ -713,6 +714,18 @@ def play_pvrla():
     print("stalemates: ", stalemates)
 
     game_number += 1
+
+    current_game_total_reward = rla_agent.sum_reward  # Get the total reward for the current game
+
+    if len(game_total_rewards) == 0:
+        # For the first game, just append the total reward
+        game_total_rewards.append(current_game_total_reward)
+    else:
+        # For subsequent games, append the difference from the last game
+        last_game_total_reward = game_total_rewards[-1]  # Get the last appended total reward
+        reward_difference = current_game_total_reward - last_game_total_reward  # Calculate the difference
+        game_total_rewards.append(reward_difference)  # Store the difference in total rewards
+
 
     board.set_board_fen(chess.STARTING_BOARD_FEN)
     start_game()
