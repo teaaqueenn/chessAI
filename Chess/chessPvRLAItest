@@ -305,6 +305,104 @@ class ChessRLAI:
                     return True  # The piece is under attack
         return False
 
+    def is_opposite_color_bishops(board):
+        white_bishops = len(board.pieces(chess.BISHOP, chess.WHITE))
+        black_bishops = len(board.pieces(chess.BISHOP, chess.BLACK))
+        return white_bishops == 1 and black_bishops == 1  # One white bishop and one black bishop
+
+    def is_back_rank_weak(board, color):
+        rank = 0 if color == chess.WHITE else 7
+        # Check if the back rank is open (no pawns or pieces that would prevent back-rank mate)
+        for file in range(8):
+            square = chess.square(file, rank)
+            piece = board.piece_at(square)
+            if piece and piece.piece_type != chess.PAWN:
+                return False  # There is a piece that could prevent a back-rank mate
+        return True  # No pieces or pawns to prevent back-rank mate
+
+    def is_doubled_pawn(board, color):
+        for file in range(8):
+            pawns_on_file = [square for square in chess.SQUARES if board.piece_at(square) == chess.PAWN and chess.square_file(square) == file]
+            if len(pawns_on_file) > 1:
+                return True  # There are doubled pawns
+        return False
+    
+    def is_connected_pawn(board, square, color):
+        file = chess.square_file(square)
+        left_square = chess.square(file - 1, chess.square_rank(square)) if file > 0 else None
+        right_square = chess.square(file + 1, chess.square_rank(square)) if file < 7 else None
+        
+        left_pawn = board.piece_at(left_square) if left_square else None
+        right_pawn = board.piece_at(right_square) if right_square else None
+        
+        # If there's a pawn on the adjacent square that is the same color, they're connected
+        return (left_pawn and left_pawn.piece_type == chess.PAWN and left_pawn.color == color) or \
+            (right_pawn and right_pawn.piece_type == chess.PAWN and right_pawn.color == color)
+    
+    def is_backward_pawn(board, square, color):
+        rank = chess.square_rank(square)
+        # Check if the pawn is backward (blocked by an opponent pawn ahead)
+        forward_square = chess.square(chess.square_file(square), rank + (1 if color == chess.WHITE else -1))
+        forward_piece = board.piece_at(forward_square)
+        return forward_piece and forward_piece.piece_type == chess.PAWN and forward_piece.color != color
+    
+    def is_weak_square(board, square, color):
+        # A weak square is one that is unprotected and can be easily attacked
+        if board.is_attacked_by(not color, square):
+            return True  # The square is under attack
+        return False
+    
+    def is_attacking_weak_piece(board, square, color):
+        piece = board.piece_at(square)
+        if piece and piece.color == color:
+            for target_square in chess.SQUARES:
+                if board.is_attacked_by(not color, target_square) and board.piece_at(target_square).color != color:
+                    return True  # The piece is attacking a weak opponent piece
+        return False
+    
+    def is_isolated_pawn(board, square):
+        """
+        Checks if the pawn on the given square is isolated. A pawn is isolated if
+        there are no other pawns of the same color on the adjacent files.
+        
+        :param board: The current chess board (chess.Board).
+        :param square: The square to check (an integer square index).
+        :param color: The color of the pawn (True for white, False for black).
+        :return: True if the pawn is isolated, False otherwise.
+        """
+        color = chess.BLACK
+        # Get the file of the pawn's square
+        file = chess.square_file(square)
+        
+        # Check the left and right adjacent files
+        left_file = file - 1 if file > 0 else None
+        right_file = file + 1 if file < 7 else None
+        
+        # Check if there are pawns on the left or right files
+        left_pawn = None
+        right_pawn = None
+        
+        # Check for a pawn on the left file (if it's valid)
+        if left_file is not None:
+            for rank in range(8):
+                left_square = chess.square(left_file, rank)
+                piece = board.piece_at(left_square)
+                if piece and piece.color == color and piece.piece_type == chess.PAWN:
+                    left_pawn = True
+                    break
+        
+        # Check for a pawn on the right file (if it's valid)
+        if right_file is not None:
+            for rank in range(8):
+                right_square = chess.square(right_file, rank)
+                piece = board.piece_at(right_square)
+                if piece and piece.color == color and piece.piece_type == chess.PAWN:
+                    right_pawn = True
+                    break
+        
+        # A pawn is isolated if there are no pawns of the same color on the adjacent files
+        return not left_pawn and not right_pawn
+
 
 
 
@@ -448,37 +546,37 @@ class ChessRLAI:
 
         # Step 16: Opposite-color bishops (reward if there is a strategic imbalance created)
         if move_piece == chess.BISHOP:
-            if board_copy.is_opposite_color_bishops():
+            if self.is_opposite_color_bishops(board_copy):
                 reward += importance_scale["opposite_color_bishops"]
 
         # Step 17: Back-rank weaknesses (penalize for leaving a back-rank weakness)
         if move_piece == chess.PAWN:
-            if board_copy.is_back_rank_weak():
+            if self.is_back_rank_weak(board_copy, chess.BLACK):
                 reward -= importance_scale["back_rank_weaknesses"]
 
         # Step 18: Isolated pawns (penalize isolated pawns)
         if move_piece == chess.PAWN:
-            if board_copy.is_isolated_pawn(move.to_square):
+            if self.is_isolated_pawn(move.to_square):
                 reward -= importance_scale["isolated_pawns"]
 
         # Step 19: Doubled pawns (penalize for doubled pawns)
         if move_piece == chess.PAWN:
-            if board_copy.is_doubled_pawn(move.to_square):
+            if self.is_doubled_pawn(board_copy, move.to_square):
                 reward -= importance_scale["doubled_pawns"]
 
         # Step 20: Connected pawns (reward for connected pawns)
         if move_piece == chess.PAWN:
-            if board_copy.is_connected_pawn(move.to_square):
+            if self.is_connected_pawn(board_copy, move.to_square):
                 reward += importance_scale["connected_pawns"]
 
         # Step 21: Backward pawns (penalize if move creates a backward pawn)
         if move_piece == chess.PAWN:
-            if board_copy.is_backward_pawn(move.to_square):
+            if self.is_backward_pawn(board_copy, move.to_square):
                 reward -= importance_scale["backward_pawns"]
 
         # Step 22: Weak squares (penalize if a weak square is created)
         if move_piece in [chess.KNIGHT, chess.BISHOP, chess.ROOK]:
-            if board_copy.is_weak_square(move.to_square):
+            if self.is_weak_square(board_copy, move.to_square):
                 reward -= importance_scale["weak_squares"]
 
         # Step 23: En passant capture (reward for en passant)
@@ -487,7 +585,7 @@ class ChessRLAI:
 
         # Step 24: Attacking opponent’s weak piece (reward for attacking vulnerable pieces)
         if move_piece in [chess.QUEEN, chess.ROOK, chess.KNIGHT]:
-            if board_copy.is_attacking_weak_piece(move.to_square):
+            if self.is_attacking_weak_piece(board_copy, move.to_square):
                 reward += importance_scale["material_gain_loss"] * 0.75
 
         # Step 25: Counter-attacks (reward for moves that create counter threats)
