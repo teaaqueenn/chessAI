@@ -48,7 +48,7 @@ def load_existing_games():
     """Load previously saved games from 'chess_games.pt' if it exists."""
     if os.path.exists('chess_games.pt'):
         print("Loading existing game data...")
-        return torch.load('chess_games.pt')  # Load existing games
+        return torch.load('chess_games.pt', weights_only=True)  # Load existing games
     else:
         print("No previous game data found. Starting fresh.")
         return []

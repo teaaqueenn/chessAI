@@ -1,0 +1,195 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import chess
+import torch.utils.data as data
+import os
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+
+# Define the neural network model
+class DQN(nn.Module):
+    def __init__(self):
+        super(DQN, self).__init__()
+        
+        # Input layer: 12 * 8 * 8 = 768 (flattened input)
+        self.fc1 = nn.Linear(12 * 8 * 8, 2048)  # First hidden layer with 2048 units
+        self.fc2 = nn.Linear(2048, 2048)        # Second hidden layer with 2048 units
+        self.fc3 = nn.Linear(2048, 1024)        # Third hidden layer with 1024 units
+        self.fc4 = nn.Linear(1024, 1024)        # Fourth hidden layer with 1024 units
+        self.fc5 = nn.Linear(1024, 512)         # Fifth hidden layer with 512 units
+        self.fc6 = nn.Linear(512, 512)          # Sixth hidden layer with 512 units
+        self.fc7 = nn.Linear(512, 256)          # Seventh hidden layer with 256 units
+        self.fc8 = nn.Linear(256, 256)          # Eighth hidden layer with 256 units
+        self.fc9 = nn.Linear(256, 128)          # Ninth hidden layer with 128 units
+        self.fc10 = nn.Linear(128, 128)         # Tenth hidden layer with 128 units
+        self.fc11 = nn.Linear(128, 64)          # Eleventh hidden layer with 64 units
+        self.fc12 = nn.Linear(64, 64)           # Twelfth hidden layer with 64 units
+        self.fc13 = nn.Linear(64, 32)           # Thirteenth hidden layer with 32 units
+        self.fc14 = nn.Linear(32, 32)           # Fourteenth hidden layer with 32 units
+        self.fc15 = nn.Linear(32, 16)           # Fifteenth hidden layer with 16 units
+        self.fc16 = nn.Linear(16, 16)           # Sixteenth hidden layer with 16 units
+        self.fc17 = nn.Linear(16, 8)            # Seventeenth hidden layer with 8 units
+        self.fc18 = nn.Linear(8, 8)             # Eighteenth hidden layer with 8 units
+        self.fc19 = nn.Linear(8, 4)             # Nineteenth hidden layer with 4 units
+        self.fc20 = nn.Linear(4, 4672)  # Output layer with 4672 units (for possible moves)
+
+        # Dropout layer to prevent overfitting (applied after each hidden layer)
+        self.dropout = nn.Dropout(0.3)  # Dropout with 30% probability of zeroing out inputs
+
+    def forward(self, x):
+        # Passing the input through all the layers with ReLU activation
+        x = torch.relu(self.fc1(x))
+        x = self.dropout(x)
+        
+        x = torch.relu(self.fc2(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc3(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc4(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc5(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc6(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc7(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc8(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc9(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc10(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc11(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc12(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc13(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc14(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc15(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc16(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc17(x))
+        x = self.dropout(x)
+
+        x = torch.relu(self.fc18(x))
+        x = self.dropout(x)
+
+        x = self.fc19(x)  # No activation for the last hidden layer
+        x = self.fc20(x)  # Output layer with dynamic action space size
+        return x
+
+# Load the games data from 'chess_games.pt'
+def load_data():
+    if os.path.exists('chess_games.pt'):
+        games = torch.load('chess_games.pt')
+
+        # Debug: Print structure of the first game to verify
+        print("Structure of first game:", games[0])  # Should be a tuple with board tensor and move
+        
+        inputs = []
+        targets = []
+        move_to_index = {}  # To map each unique move to an index
+        index = 0
+
+        # Process the games
+        for game in games:
+            if isinstance(game, tuple) and len(game) == 2:
+                board_tensor, move = game  # Unpack the tuple correctly
+                inputs.append(board_tensor)
+
+                # Get the UCI string of the move and map it to an index
+                move_uci = move.uci()
+                if move_uci not in move_to_index:
+                    move_to_index[move_uci] = index
+                    index += 1
+                
+                targets.append(move_to_index[move_uci])  # Use the index of the move
+            else:
+                print("Unexpected format for game:", game)
+
+        # Convert lists to tensors
+        inputs = torch.stack(inputs)
+        targets = torch.tensor(targets)  # Targets are now move indices
+        return inputs, targets, len(move_to_index)
+    else:
+        raise FileNotFoundError("chess_games.pt not found!")
+
+# Training function with graphing support
+def train_model(model, inputs, targets, epochs=400, batch_size=400, lr=0.001):
+    # Create a DataLoader for batching
+    dataset = data.TensorDataset(inputs, targets)
+    dataloader = data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    
+    # Define loss function and optimizer
+    loss_fn = nn.CrossEntropyLoss()  # CrossEntropyLoss expects class indices as target
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    
+    # Store loss values for graphing
+    epoch_losses = []
+
+    # Training loop with tqdm for progress bars
+    for epoch in range(epochs):
+        model.train()
+        running_loss = 0.0
+
+        # Create a tqdm progress bar for the batches in each epoch
+        with tqdm(enumerate(dataloader), total=len(dataloader), desc=f'Epoch {epoch+1}/{epochs}') as pbar:
+            for i, (inputs_batch, targets_batch) in pbar:
+                # Print batch size for each iteration to confirm
+                #print(f"Batch size: {inputs_batch.size(0)}")
+
+                optimizer.zero_grad()  # Zero the gradients
+                outputs = model(inputs_batch)  # Forward pass
+                loss = loss_fn(outputs, targets_batch)  # Calculate loss
+                loss.backward()  # Backpropagate
+                optimizer.step()  # Update weights
+
+                running_loss += loss.item()
+
+                # Update the progress bar with the current loss
+                pbar.set_postfix(loss=loss.item())
+
+        # Average loss for the epoch
+        avg_loss = running_loss / len(dataloader)
+        epoch_losses.append(avg_loss)
+        print(f"Epoch [{epoch+1}/{epochs}], Avg. Loss: {avg_loss:.4f}")
+
+    # Plot the loss curve after training
+    plt.plot(range(1, epochs + 1), epoch_losses, marker='o')
+    plt.title('Training Loss Over Epochs')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.grid(True)
+    plt.show()
+
+    # Save the trained model
+    torch.save(model.state_dict(), 'chess_model.pth')
+    print("Model saved as 'chess_model.pth'.")
+
+# Load data
+inputs, targets, indexMoveLength = load_data()
+
+# Instantiate the model
+model = DQN()
+
+# Pre-train the model
+train_model(model, inputs, targets, epochs=400)
