@@ -44,8 +44,8 @@ turn_rewards = []
 turn_numbers =[]
 average_game_q_values = []
 average_game_q_values.append(0.0)
-turn_q_values = []
 best_move_q_value = 0.0
+turn_q_values = []
 average_q_value = 0.0
 turn_number = 0.0
 white_wins = 0
@@ -786,6 +786,7 @@ class ChessRLAI:
 
 
     def find_best_move_with_q_values(self, board, gamma=0.99, alpha=0.1):
+        global best_move_q_value
         """
         Calculate the Q-values for each legal move, update the Q-value using Q-learning,
         and return the move with the highest Q-value.
@@ -812,7 +813,6 @@ class ChessRLAI:
 
         # Initialize best_move outside the if-else block
         best_move = None
-        best_move_q_value = 0.0
         if rand_val < self.epsilon:
             # Explore: Choose a random legal move
             best_move = random.choice(legal_moves)
@@ -1048,6 +1048,30 @@ def on_click(event):
             turn.set(1)
             # Reset to first click mode after move
         elif piece:
+            # Check if the clicked piece is a rook for castling logic
+            if piece.piece_type == chess.ROOK:
+                print(f"Clicked on: {piece} at {clicked_square}")
+                if board.has_castling_rights(chess.WHITE):
+                    if clicked_square == "h1" and uci_click == "e1":
+                        makePlayerMove("e1g1")
+                        firstClick = True
+                        highlighted_square = None
+                        highlighted_legal_moves = []
+                        turn.set(1)
+                        return
+                    elif clicked_square == "a1" and uci_click == "e1":
+                        makePlayerMove("e1c1")
+                        firstClick = True
+                        highlighted_square = None
+                        highlighted_legal_moves = []
+                        turn.set(1)
+                        return
+                else:
+                    print("Clicked on a piece: " + str(piece) + ". At index: " + str(square) + ". Clicked on:" + clicked_square)
+                    highlighted_square = None
+                    highlighted_legal_moves = []
+                    firstClick = True  # Go back to selecting a new piece
+                    return
             print("Clicked on a piece: " + str(piece) + ". At index: " + str(square) + ". Clicked on:" + clicked_square)
             highlighted_square = None
             highlighted_legal_moves = []
@@ -1068,29 +1092,43 @@ def on_click(event):
 # Function to get legal moves for a given square (in UCI notation)
 def get_legal_moves(board, clicked_square):
     legal_moves = []
-    moves = board.legal_moves  # This should be a set of LegalMove objects
+    moves = list(board.legal_moves)  # List of legal moves
     
     for move in moves:
-        # Convert the move to UCI notation (e.g., "e2e4")
-        uci_move = move.uci()
+        uci_move = move.uci()  # Get move in UCI notation
         
-        # Check if the first two characters of UCI move match the clicked square
+        # Check if the move involves the clicked square
         if uci_move[:2] == clicked_square:
-            # Extract the destination square in UCI format (e.g., "e4")
-            destination_square_uci = uci_move[2:4]
-            file_char = destination_square_uci[0]  # e.g., "e"
-            rank_char = destination_square_uci[1]  # e.g., "4"
-            
-                        # Convert the file (char) to an index (0-7)
-            file_index = ord(file_char) - 97  # 'a' -> 0, 'b' -> 1, ..., 'h' -> 7
-            
-            # Convert the rank (char) to an integer (1 -> 0, 2 -> 1, ..., 8 -> 7)
-            rank_index = int(rank_char) - 1  # "1" -> 0, "2" -> 1, ..., "8" -> 7
-                        
-            # Use chess.square to convert (file_index, rank_index) to the square index
-            destination_square = chess.square(file_index, rank_index)
-            
-            legal_moves.append(destination_square)
+            # Castling move check (King moves two squares)
+            if uci_move == "e1g1" or uci_move == "e1c1" or uci_move == "e8g8" or uci_move == "e8c8":
+                destination_square_uci = uci_move[2:4]  # Extract destination square in UCI format
+                if destination_square_uci == "g1":
+                    destination_square_uci = "f1"
+                elif destination_square_uci == "c1":
+                    destination_square_uci = "d1"
+                elif destination_square_uci == "g8":
+                    destination_square_uci = "f8"
+                elif destination_square_uci == "c8":
+                    destination_square_uci = "d8"
+                # This is a castling move, add it to legal_moves and remove from moves
+                legal_moves.append(destination_square_uci)  # Add the destination square
+                moves.remove(move)  # Remove from moves list
+            else:
+                # Handle regular moves
+                destination_square_uci = uci_move[2:4]  # Extract destination square in UCI format
+                file_char = destination_square_uci[0]  # e.g., "e"
+                rank_char = destination_square_uci[1]  # e.g., "4"
+                
+                # Convert the file (char) to an index (0-7)
+                file_index = ord(file_char) - 97  # 'a' -> 0, 'b' -> 1, ..., 'h' -> 7
+                
+                # Convert the rank (char) to an integer (1 -> 0, 2 -> 1, ..., 8 -> 7)
+                rank_index = int(rank_char) - 1  # "1" -> 0, "2" -> 1, ..., "8" -> 7
+                
+                # Use chess.square to convert (file_index, rank_index) to the square index
+                destination_square = chess.square(file_index, rank_index)
+                
+                legal_moves.append(destination_square)  # Add regular move to legal_moves
     
     return legal_moves
 
@@ -1246,7 +1284,7 @@ turn = tk.IntVar(value=0)
 
 # Function to handle the Player vs RLAI mode
 def play_pvrla():
-    global stalemates, white_wins, black_wins, game_numbers, total_rewards, turn_numbers, turn_number, best_move_q_value, average_game_q_values, turn_q_values, average_q_value
+    global stalemates, white_wins, black_wins, game_numbers, total_rewards, turn_numbers, turn_number,  average_game_q_values, turn_q_values, average_q_value
     print("play_pvrla started")
     while not board.is_game_over():
         print("turn before display_board: ", turn.get())
@@ -1295,21 +1333,26 @@ def play_pvrla():
                 print("turn reward: ", turn_reward)
                 turn_rewards.append(turn_reward)
                 total_rewards.append(rla_agent.total_reward)
-                average_q_value += best_move_q_value
-                average_q_value /= 2
+                if(average_game_q_values.__len__() <= 1):
+                    average_q_value = best_move_q_value
+                else:
+                    average_q_value += best_move_q_value
+                    average_q_value /= 2
+                print("average q vals:", average_q_value)
                 plot_results()
             else:
                 continue
             
             #rla_agent.update_model_after_move(board, move, rla_agent.reward_of_move(move, board))
-
+            
             turn.set(0)  # Change to White's turn after AI's move
 
         # Introduce a small delay for better viewing of the moves
         root.after(20)  # Non-blocking way to add a delay for viewing purposes
-
+    print("average q vals:", average_q_value)
     game_numbers.append(game_numbers[-1] + 1)
     average_game_q_values.append(average_q_value)
+    average_q_value = 0.0
 
 
     # Once the game is over, print the result
