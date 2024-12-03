@@ -412,10 +412,10 @@ class ChessRLAI:
         self.total_loss = 0.0
         self.turn_reward = 0.0
 
-        self.load_pretrained_weights('chess_model.pth')
+        self.load_pretrained_weights(r"C:\Users\Grace\Documents\GitHub\chessAI\chess_ai_model_v1.pth")
 
     def load_model(model):
-        filename = "chess_model.pth"
+        filename = r"C:\Users\Grace\Documents\GitHub\chessAI\chess_ai_model_v1.pth"
         model.load_state_dict(torch.load(filename))
         model.eval()  # Set the model to evaluation mode
         print(f"Model loaded from {filename}")
@@ -424,65 +424,72 @@ class ChessRLAI:
     def load_pretrained_weights(self, path):
         self.model.load_state_dict(torch.load(path))
 
-    def update_model_after_move(self, board, move, reward):
+    def update_model_after_game(self, game_moves, game_rewards):
         """
-        Update the model after each move using Q-learning.
+        Update the model after the entire game using Q-learning.
 
         Parameters:
-            board (chess.Board): The current state of the board.
-            move (chess.Move): The move that was just made.
-            reward (float): The reward received for the move.
+            game_moves (list of chess.Move): The list of moves made during the game.
+            game_rewards (list of float): The rewards received for each move in the game.
         """
-        # Convert the current board state to tensor
-        state_tensor = board_to_tensor(board).unsqueeze(0)  # Add batch dimension
+        # Initialize total loss for the game
+        total_loss = 0
 
-        # Get the Q-values for the current state
-        current_q_values = self.model(state_tensor).squeeze(0)
+        for move, reward in zip(game_moves, game_rewards):
+            # Convert the current board state to tensor
+            state_tensor = board_to_tensor(move.board()).unsqueeze(0)  # Add batch dimension
 
-        # Simulate the move by copying the board and making the move on the clone
-        cloned_board = copy.deepcopy(board)  # Clone the board
-        cloned_board.push(move)  # Make the move on the cloned board
+            # Get the Q-values for the current state
+            current_q_values = self.model(state_tensor).squeeze(0)
 
-        # Convert the new state after the move to tensor
-        next_state_tensor = board_to_tensor(cloned_board).unsqueeze(0)  # Get the next state tensor after the move
+            # Simulate the move by copying the board and making the move on the clone
+            cloned_board = copy.deepcopy(move.board())  # Clone the board
+            cloned_board.push(move)  # Make the move on the cloned board
 
-        # Get the Q-values for the next state
-        next_q_values = self.model(next_state_tensor).squeeze(0)
+            # Convert the new state after the move to tensor
+            next_state_tensor = board_to_tensor(cloned_board).unsqueeze(0)  # Get the next state tensor after the move
 
-        # Calculate the maximum Q-value for the next state
-        max_next_q_value = torch.max(next_q_values).item()
+            # Get the Q-values for the next state
+            next_q_values = self.model(next_state_tensor).squeeze(0)
 
-        # Find the index of the move in the model's Q-value predictions
-        legal_moves = list(board.legal_moves)
-        move_index = legal_moves.index(move)
+            # Calculate the maximum Q-value for the next state
+            max_next_q_value = torch.max(next_q_values).item()
 
-        # Get the current Q-value for the move
-        current_q_value = current_q_values[move_index].item()
+            # Find the index of the move in the model's Q-value predictions
+            legal_moves = list(move.board().legal_moves)
+            move_index = legal_moves.index(move)
 
-        # Calculate the new Q-value using the Q-learning equation
-        updated_q_value = current_q_value + self.learning_rate * (reward + self.gamma * max_next_q_value - current_q_value)
+            # Get the current Q-value for the move
+            current_q_value = current_q_values[move_index].item()
 
-        # Create a tensor for the updated Q-value
-        updated_q_value_tensor = torch.tensor([updated_q_value]).unsqueeze(0)  # Add batch dimension
+            # Calculate the new Q-value using the Q-learning equation
+            updated_q_value = current_q_value + self.learning_rate * (reward + self.gamma * max_next_q_value - current_q_value)
 
-        # Prepare the target Q-values for the loss calculation
-        target_q_values = current_q_values.clone()
-        target_q_values[move_index] = updated_q_value_tensor.item()
+            # Create a tensor for the updated Q-value
+            updated_q_value_tensor = torch.tensor([updated_q_value]).unsqueeze(0)  # Add batch dimension
 
-        # Calculate the loss (using MSE)
-        loss = self.loss_fn(current_q_values, target_q_values)
+            # Prepare the target Q-values for the loss calculation
+            target_q_values = current_q_values.clone()
+            target_q_values[move_index] = updated_q_value_tensor.item()
 
-        # Zero gradients
-        self.optimizer.zero_grad()
+            # Calculate the loss (using MSE)
+            loss = self.loss_fn(current_q_values, target_q_values)
 
-        # Backpropagation
-        loss.backward()
+            # Zero gradients
+            self.optimizer.zero_grad()
 
-        # Optimize the model
-        self.optimizer.step()
+            # Backpropagation
+            loss.backward()
 
-        # Update total loss for tracking
-        self.total_loss += loss.item()    
+            # Optimize the model
+            self.optimizer.step()
+
+            # Update total loss for the game
+            total_loss += loss.item()
+
+        # After the game ends, you can track the total loss, or any other metrics
+        self.total_loss += total_loss
+        print(f"Total loss for the game: {total_loss}")
 
     def save_model(self, filename='chess_ai_model_updated.pth'):
         """
@@ -1125,11 +1132,13 @@ def display_board():
                                    row * square_size + square_size / 2,
                                    text=piece_char, font=("Times New Roman", 36))
 
+            '''
             # Display the square number (0 to 63) in the center of the square
             square_number = chess.square(col, 7 - row)  # Get the square number from (col, row)
             canvas.create_text(col * square_size + square_size / 2,
                                row * square_size + square_size / 2,
                                text=str(square_number), font=("Times New Roman", 12, "bold"), fill="black")
+            '''
 
     # Draw row labels (1-8) on the left side of the board
     for row in range(8):
@@ -1292,7 +1301,7 @@ def play_pvrla():
             else:
                 continue
             
-            rla_agent.update_model_after_move(board, move, rla_agent.reward_of_move(move, board))
+            #rla_agent.update_model_after_move(board, move, rla_agent.reward_of_move(move, board))
 
             turn.set(0)  # Change to White's turn after AI's move
 
@@ -1352,13 +1361,10 @@ def start_game():
 
 # Call the function to update model first
 
-trainer = ModelTrainer()
+#trainer = ModelTrainer()
 
 # Call pretrain_and_save_model before starting the game
-trainer.pretrain_and_save_model()
+#trainer.pretrain_and_save_model()
 
 # Start the game
-#start_game()
-
-# Initial board display
-#display_board()
+start_game()
