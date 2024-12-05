@@ -56,6 +56,9 @@ highlighted_legal_moves = []           # List to store legal moves for the selec
 game_total_rewards = []  # List to store total rewards for each game
 game_total_rewards.append(0.0)
 
+stockBestQ = 0.0
+stockBestVals = []
+
 fig = None
 ax = None
 
@@ -474,12 +477,77 @@ class ChessRLAI:
         self.board_evaluations[board_fen] = reward
         
         return reward
+    
 
+    def get_best_move(self, board, time_limit: float = 2.0):
+        """
+        Determines the best move from the current board state using Stockfish.
+        
+        :param board: The current chess board state (chess.Board object).
+        :param stockfish_path: Path to the Stockfish engine executable.
+        :param time_limit: Time in seconds for Stockfish to think (default is 1.0 second).
+        :return: The best move (chess.Move object).
+        """
+        
+        # Start Stockfish engine
+        with chess.engine.SimpleEngine.popen_uci(self.stockfishpath) as engine:
+            # Get the best move by analyzing the current board state
+            result = engine.play(board, chess.engine.Limit(time=time_limit))
+            
+            # The best move chosen by Stockfish
+            best_move = result.move
+        
+        return best_move
+    
+
+    def getQVals(self, board, move, legal_moves, alpha, gamma):
+        """
+        Calculate the Q-value for a given move on the current board state using the Q-learning equation.
+
+        Parameters:
+            board (chess.Board): The current chess board state.
+            move (chess.Move): The move to evaluate.
+            legal_moves (list): List of legal moves in the current position.
+            alpha (float): Learning rate for Q-value update.
+            gamma (float): Discount factor for future rewards.
+
+        Returns:
+            float: The updated Q-value for the given move.
+        """
+        # Step 1: Convert the current board state to tensor
+        state_tensor = board_to_tensor(board).unsqueeze(0)  # Add batch dimension
+
+        # Step 2: Get the Q-values for the current state
+        current_q_values = self.model(state_tensor).squeeze(0)
+
+        # Step 3: Simulate the move by copying the board and making the move on the clone
+        cloned_board = copy.deepcopy(board)  # Clone the board
+        cloned_board.push(move)  # Make the move on the cloned board
+
+        # Step 4: Convert the new state after the move to tensor
+        next_state_tensor = board_to_tensor(cloned_board).unsqueeze(0)  # Get the next state tensor after the move
+
+        # Step 5: Get the Q-values for the next state
+        next_q_values = self.model(next_state_tensor).squeeze(0)
+
+        # Step 6: Calculate the maximum Q-value for the next state
+        max_next_q_value = torch.max(next_q_values).item()
+
+        # Step 7: Find the index of the move in the model's Q-value predictions
+        move_index = legal_moves.index(move)
+
+        # Step 8: Get the current Q-value for the move
+        current_q_value = current_q_values[move_index].item()
+
+        # Step 9: Calculate the new Q-value using the Q-learning equation
+        updated_q_value = current_q_value + alpha * (self.reward_of_move(move, board) + gamma * max_next_q_value - current_q_value)
+
+        return updated_q_value
 
 
 
     def find_best_move_with_q_values(self, board, gamma=0.99, alpha=0.1):
-        global best_move_q_value
+        global best_move_q_value, stockBestVals
         """
         Calculate the Q-values for each legal move, update the Q-value using Q-learning,
         and return the move with the highest Q-value.
@@ -514,6 +582,12 @@ class ChessRLAI:
             # Since it's a random move, we can assign a default Q-value (e.g., 0) for it
             best_move_q_value = random_move_q_value
 
+            stockMove = self.get_best_move(board)
+            
+            stockMove_q_value = self.reward_of_move(stockMove, board)
+
+            stockBestVals.append(stockMove_q_value)
+
             self.total_reward += self.reward_of_move(best_move, board)
         else:
             print("using q-vals")
@@ -522,33 +596,7 @@ class ChessRLAI:
             with torch.no_grad():
                 # Loop through each legal move and calculate the Q-value
                 for move in legal_moves:
-                    # Step 1: Convert the current board state to tensor
-                    state_tensor = board_to_tensor(board).unsqueeze(0)  # Add batch dimension
-
-                    # Step 2: Get the Q-values for the current state
-                    current_q_values = self.model(state_tensor).squeeze(0)
-
-                    # Step 3: Simulate the move by copying the board and making the move on the clone
-                    cloned_board = copy.deepcopy(board)  # Clone the board
-                    cloned_board.push(move)  # Make the move on the cloned board
-
-                    # Step 4: Convert the new state after the move to tensor
-                    next_state_tensor = board_to_tensor(cloned_board).unsqueeze(0)  # Get the next state tensor after the move
-
-                    # Step 5: Get the Q-values for the next state
-                    next_q_values = self.model(next_state_tensor).squeeze(0)
-
-                    # Step 6: Calculate the maximum Q-value for the next state
-                    max_next_q_value = torch.max(next_q_values).item()
-
-                    # Step 7: Find the index of the move in the model's Q-value predictions
-                    move_index = legal_moves.index(move)
-
-                    # Step 8: Get the current Q-value for the move
-                    current_q_value = current_q_values[move_index].item()
-
-                    # Step 9: Calculate the new Q-value using the Q-learning equation
-                    updated_q_value = current_q_value + alpha * (self.reward_of_move(move, board) + gamma * max_next_q_value - current_q_value)
+                    updated_q_value = self.getQVals(board, move, legal_moves, alpha, gamma)  # Call getQvals
 
                     # Append the updated Q-value to the list
                     q_values.append(updated_q_value)
@@ -567,6 +615,12 @@ class ChessRLAI:
                 self.total_reward += self.reward_of_move(best_move, board)
 
                 self.sum_reward += self.reward_of_move(best_move, board)
+            
+            stockMove = self.get_best_move(board)
+            
+            stockMove_q_value = self.getQVals(board, stockMove, legal_moves, alpha, gamma)
+
+            stockBestVals.append(stockMove_q_value)
                 
         turn_q_values.append(best_move_q_value)
 
@@ -646,6 +700,7 @@ def plot_results():
 
     ax[1,2].cla()  # Clear the fourth subplot
     ax[1,2].plot(turn_numbers, turn_q_values, marker='x', color='r', label="Turn Q-Value")
+    ax[1,2].plot(turn_numbers, stockBestVals, marker='x', color='b', label="Stock Q-Value")
     ax[1,2].set_title("Turn Q-Value vs Turns")
     ax[1,2].set_xlabel("Turns")
     ax[1,2].set_ylabel("Turn Q-Value")
