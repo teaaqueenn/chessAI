@@ -1049,23 +1049,22 @@ def on_click(event):
             # Reset to first click mode after move
         elif piece:
             # Check if the clicked piece is a rook for castling logic
-            if piece.piece_type == chess.ROOK:
-                print(f"Clicked on: {piece} at {clicked_square}")
-                if board.has_castling_rights(chess.WHITE):
-                    if clicked_square == "h1" and uci_click == "e1":
-                        makePlayerMove("e1g1")
-                        firstClick = True
-                        highlighted_square = None
-                        highlighted_legal_moves = []
-                        turn.set(1)
-                        return
-                    elif clicked_square == "a1" and uci_click == "e1":
-                        makePlayerMove("e1c1")
-                        firstClick = True
-                        highlighted_square = None
-                        highlighted_legal_moves = []
-                        turn.set(1)
-                        return
+            print(f"Clicked on: {piece} at {clicked_square}")
+            if board.has_castling_rights(chess.WHITE):
+                if (clicked_square == "h1" or clicked_square == "g1") and uci_click == "e1":
+                    makePlayerMove("e1g1")
+                    firstClick = True
+                    highlighted_square = None
+                    highlighted_legal_moves = []
+                    turn.set(1)
+                    return
+                elif (clicked_square == "a1" or clicked_square == "c1")  and uci_click == "e1":
+                    makePlayerMove("e1c1")
+                    firstClick = True
+                    highlighted_square = None
+                    highlighted_legal_moves = []
+                    turn.set(1)
+                    return
                 else:
                     print("Clicked on a piece: " + str(piece) + ". At index: " + str(square) + ". Clicked on:" + clicked_square)
                     highlighted_square = None
@@ -1389,9 +1388,31 @@ def play_pvrla():
     print("stalemates: ", stalemates)
 
 
-    board.set_board_fen(chess.STARTING_BOARD_FEN)
+    reset_game()
     plot_results()
     start_game()
+
+def reset_game():
+    global highlighted_square, highlighted_legal_moves, firstClick, uci_click, turn, board, canvas
+    
+    # Reset global variables
+    highlighted_square = None
+    highlighted_legal_moves = []
+    firstClick = True
+    uci_click = ""
+    
+    # Set turn to white (0 for white's turn, 1 for black's turn)
+    turn.set(0)  # White's turn (set to 0 for white, 1 for black)
+
+    # Reset the chessboard to the starting position
+    board = chess.Board()
+    
+    # Redraw the board
+    canvas.delete("all")  # Clear the canvas
+    display_board()        # Redraw the board with updated highlights (assuming you have a display_board function)
+
+    # Print a statement for debugging purposes
+    print("Game has been reset. It is now White's turn.")
 
 
 
