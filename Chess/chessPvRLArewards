@@ -45,8 +45,6 @@ turn_numbers =[]
 average_game_q_values = []
 average_game_q_values.append(0.0)
 best_move_q_value = 0.0
-stock_best_move_q_value = 0.0
-stock_best_move_q_values = []
 turn_q_values = []
 average_q_value = 0.0
 turn_number = 0.0
@@ -87,7 +85,10 @@ root.title("Chess Game")
 canvas = tk.Canvas(root, width=670, height=670)
 canvas.pack()
 
-engine = chess.engine.SimpleEngine.popen_uci(r"C:\Users\Grace\Documents\GitHub\chessAI\Chess\Pre-train\stockfish-windows-x86-64-avx2\stockfish\stockfish-windows-x86-64-avx2.exe")
+# Define the Deep Q-Network (DQN) model
+import torch
+import torch.nn as nn
+
 
 
 class DQN(nn.Module):
@@ -394,38 +395,7 @@ class ModelTrainer:
         # Save the trained model
         torch.save(self.model.state_dict(), 'chess_ai_model_v1.pth')
         print("Model saved as 'chess_ai_model_v1.pth'")
-
-def calculate_single_move_q_value(move, board, model, alpha, gamma, reward):
-    legal_moves = list(board.legal_moves)
-    # Step 1: Convert the current board state to tensor
-    state_tensor = board_to_tensor(board).unsqueeze(0)  # Add batch dimension
-
-    # Step 2: Get the Q-values for the current state
-    current_q_values = model(state_tensor).squeeze(0)
-
-    # Step 3: Simulate the move by copying the board and making the move on the clone
-    cloned_board = copy.deepcopy(board)  # Clone the board
-    cloned_board.push(move)  # Make the move on the cloned board
-
-    # Step 4: Convert the new state after the move to tensor
-    next_state_tensor = board_to_tensor(cloned_board).unsqueeze(0)  # Get the next state tensor after the move
-
-    # Step 5: Get the Q-values for the next state
-    next_q_values = model(next_state_tensor).squeeze(0)
-
-    # Step 6: Calculate the maximum Q-value for the next state
-    max_next_q_value = torch.max(next_q_values).item()
-
-    # Step 7: Find the index of the move in the model's Q-value predictions
-    move_index = legal_moves.index(move)
-
-    # Step 8: Get the current Q-value for the move
-    current_q_value = current_q_values[move_index].item()
-
-    # Step 9: Calculate the new Q-value using the Q-learning equation
-    updated_q_value = current_q_value + alpha * (reward + gamma * max_next_q_value - current_q_value)
-
-    return updated_q_value
+    
 
 class ChessRLAI:
     def __init__(self, model = DQN(), epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.995, learning_rate=0.001, gamma=0.99):
@@ -531,42 +501,292 @@ class ChessRLAI:
         torch.save(self.model.state_dict(), filename)
         print(f"Model saved as '{filename}'")
 
+    def is_fork(self, board, square):
+        """
+        Check if the piece at `square` is performing a fork.
+        A fork happens when one piece attacks two or more pieces of the opponent.
+        """
+        piece = board.piece_at(square)
+        if piece is None or piece.color != chess.BLACK:
+            return False
 
-    import chess.engine
+        # Get all attacked squares
+        attacked_squares = board.attacks(square)
+        
+        # Count how many opponent pieces are being attacked
+        attacked_pieces = [board.piece_at(sq) for sq in attacked_squares if board.piece_at(sq) and board.piece_at(sq).color == chess.WHITE]
+        
+        # If two or more opponent pieces are attacked, it's a fork
+        return len(attacked_pieces) >= 2
+
+    def is_double_attack(self, board, square):
+        """
+        Check if the piece at `square` is attacking two opponent pieces at the same time.
+        A double attack occurs when one piece attacks two opponent pieces simultaneously.
+        """
+        piece = board.piece_at(square)
+        if piece is None or piece.color != chess.BLACK:
+            return False
+
+        # Get all attacked squares
+        attacked_squares = board.attacks(square)
+        
+        # Count how many opponent pieces are being attacked
+        attacked_pieces = [board.piece_at(sq) for sq in attacked_squares if board.piece_at(sq) and board.piece_at(sq).color == chess.WHITE]
+        
+        # If two or more opponent pieces are attacked simultaneously, it's a double attack
+        return len(attacked_pieces) >= 2
+    
+    def is_back_rank_threat(self, board):
+        """
+        Check if there is a back rank threat against the opponent's king.
+        A back rank threat occurs when the opponent's king is on the back rank
+        and there is a potential check from a black piece (typically a rook or queen).
+        """
+        # Get the location of the white king (since we're checking for black's threat)
+        white_king_square = board.king(chess.WHITE)
+        
+        # Check if the white king is on the 1st rank (back rank for white)
+        if white_king_square not in chess.SQUARES[0:8]:  # First rank is 0-7 (row 1)
+            return False  # White king is not on the back rank
+        
+        # Check if the opponent's back rank is blocked or if there are escape squares
+        for square in chess.SQUARES[0:8]:
+            piece = board.piece_at(square)
+            if piece and piece.color == chess.WHITE:
+                # If there's a white piece on the back rank, the back rank is "blocked"
+                # and may provide a potential check from a black piece.
+                return True
+        
+        # If there's a black piece threatening the back rank (typically rooks or queens)
+        for square in chess.SQUARES[0:8]:
+            # Check if a black piece is on the same rank as the white king
+            piece = board.piece_at(square)
+            if piece and piece.color == chess.BLACK:
+                if piece.piece_type in [chess.ROOK, chess.QUEEN]:  # Corrected line
+                    # If a rook or queen is attacking on the back rank, it's a threat
+                    if board.is_check():
+                        return True
+        
+        return False
+    
+    def is_piece_vulnerable(self, board, square):
+        # Determine which color is playing
+        color = board.turn
+        
+        # Iterate over all opponent's pieces
+        opponent_color = not color
+        for square in chess.SQUARES:
+            piece = board.piece_at(square)
+            if piece and piece.color == opponent_color:
+                # Check if the opponent can move to the target square
+                legal_moves = board.legal_moves
+                for move in legal_moves:
+                    if move.to_square == square:
+                        return True
+        return False
+
 
     def reward_of_move(self, move, board) -> float:
-        # Make the move on the board
-        board.push(move)
-        
-        # Get the evaluation score from Stockfish (in centipawns)
-        info = engine.analyse(board, chess.engine.Limit(time=1.5))
+        """
+        Calculate the reward for a given move, considering both tactical motifs and material factors.
+        """
+        reward = 0.0
 
-        score = info["score"]
-        
-        # If the score is a centipawn evaluation, adjust for Black's perspective
-        if score.relative.score is not None:
-            # Ensure score.relative.score is treated as an attribute, not a method
-            reward = -score.relative.score() / 100.0  # Convert centipawns to pawns and invert for Black's perspective
-        
-        # If the score is a mate-in-N evaluation, scale it based on mate depth
-        elif score.relative.mate is not None:  # Mate evaluation
-            mate_depth = abs(score.relative.mate())  # Get the depth of the mate (positive for White, negative for Black)
-            mate_value = mate_depth * 1000  # Scale the mate depth to centipawns (1000 per move to mate)
+        # Define piece values for each type of piece (based on standard chess piece values)
+        piece_value = {
+            chess.PAWN: 1.0,
+            chess.KNIGHT: 3.0,
+            chess.BISHOP: 3.0,
+            chess.ROOK: 5.0,  # Adjusted value for rooks (standard: 5, but more dynamic based on board context)
+            chess.QUEEN: 9.0,
+            chess.KING: 0.0  # King does not have a direct value in terms of material
+        }
 
-            if score.relative.mate > 0:
-                reward = -mate_value  # Negative for White checkmate (since you're Black)
-            else:
-                reward = mate_value  # Positive for Black checkmate (since you're Black)
-        else:
-            reward = 0  # Default for other cases (no evaluation available)
+        # Importance scale for different chess concepts (scaled from 1-10)
+        importance_scale = {
+            "material_gain_loss": 9.5,
+            "check_checkmate": 9.45,
+            "king_safety": 9.4,
+            "piece_development": 8.95,
+            "control_of_center": 8.9,
+            "threats_and_tactics": 8.85,
+            "pawn_structure": 8.75,
+            "piece_activity": 8.6,
+            "attacks_on_king": 8.55,
+            "rook_queen_activity": 8.5,
+            "pawn_breaks": 8.45,
+            "passed_pawns": 8.2,
+            "creating_plan": 8.15,
+            "knight_outposts": 8.1,
+            "piece_protection": 8.05,
+            "avoiding_hanging_pieces": 8.0,
+            "promotion_threats": 7.95,
+            "opposite_color_bishops": 7.75,
+            "back_rank_weaknesses": 7.6,
+            "isolated_pawns": 7.55,
+            "doubled_pawns": 7.5,
+            "connected_pawns": 7.4,
+            "backward_pawns": 7.3,
+            "weak_squares": 7.2,
+            "en_passant": 6.0
+        }
+
+        # Create a copy of the board to simulate the move
+        board_copy = board.copy()
+
+        # Step 1: Material gain or loss (scaled reward based on piece value)
+        if board_copy.is_capture(move):
+            captured_piece = board_copy.piece_at(move.to_square)
+            if captured_piece:
+                piece_type = captured_piece.piece_type
+                reward += importance_scale["material_gain_loss"] * piece_value.get(piece_type, 0.0)
+
+        # Step 2: Check or checkmate (scaled reward)
+        board_copy.push(move)
+        if board_copy.is_checkmate():
+            reward += importance_scale["check_checkmate"]
+        elif board_copy.is_check():
+            reward += importance_scale["check_checkmate"] * 0.5  # Slightly smaller reward for check
+        board_copy.pop()
+
+        # Step 3: King safety (penalize if king becomes exposed)
+        if board_copy.is_check():
+            reward -= importance_scale["king_safety"] * 0.5  # Penalize for putting the king in check
+
+        # Step 4: Piece development (reward if piece is developed)
+        move_piece = board_copy.piece_at(move.from_square)
+        if move_piece:
+            piece_type = move_piece.piece_type
+            if piece_type == chess.PAWN:
+                if move.to_square in [chess.C3, chess.F3, chess.C6, chess.F6]:  # Example: central pawn pushes
+                    reward += importance_scale["piece_development"]
+            elif piece_type in [chess.KNIGHT, chess.BISHOP]:
+                if move.to_square in [chess.D3, chess.E3, chess.D6, chess.E6]:  # Example: key squares for piece development
+                    reward += importance_scale["piece_development"]
+
+        # Step 5: Control of the center (reward for controlling central squares)
+        if move.to_square in [chess.D4, chess.E4, chess.D5, chess.E5]:  # Example: controlling the center
+            reward += importance_scale["control_of_center"]
+
+        # Step 6: Threats and tactics (reward for tactical moves like forks, pins) with multipliers
+        if self.is_fork(board_copy, move.to_square):
+            reward += importance_scale["threats_and_tactics"] * 1.5  
+        if board.is_pinned(chess.BLACK, move.to_square):
+            reward += importance_scale["threats_and_tactics"] * 1.0
+        if self.is_double_attack(board_copy, move.to_square):
+            reward += importance_scale["threats_and_tactics"] * 1.2
+        if self.is_back_rank_threat(board_copy):
+            reward += importance_scale["threats_and_tactics"] * 0.5
+
+        if move_piece == chess.QUEEN:
+            if board_copy.is_check():  # Threatening the opponent's king with the queen
+                reward += importance_scale["threats_and_tactics"]
+
+        # Step 7: Pawn structure (penalize if structure is weakened)
+        if move_piece == chess.PAWN:
+            if board_copy.is_isolated(move.to_square):
+                reward -= importance_scale["pawn_structure"] * 0.5  # Penalize isolated pawns
+
+        # Step 8: Piece activity (reward if piece becomes more active)
+        if move_piece == chess.ROOK:
+            if move.to_square in [chess.D1, chess.E1, chess.D8, chess.E8]:  # Example: activating rooks
+                reward += importance_scale["rook_queen_activity"]
+
+        # Step 9: Attacks on the opponent's king (reward for attacking moves)
+        if board_copy.is_checkmate():
+            reward += importance_scale["attacks_on_king"]
+
+        # Step 10: Passed pawns (reward if the move advances a passed pawn)
+        if move_piece == chess.PAWN:
+            if board_copy.is_passed_pawn(move.to_square):
+                reward += importance_scale["passed_pawns"]
+
+        # Step 11: Creating a plan (reward for structured, purposeful moves)
+        if move_piece == chess.KNIGHT:
+            reward += importance_scale["creating_plan"]
+
+        # Step 12: Knight outposts (reward for placing knights on outposts)
+        if move_piece == chess.KNIGHT:
+            if move.to_square in [chess.D4, chess.E5, chess.D5, chess.E4]:
+                reward += importance_scale["knight_outposts"]
+
+        # Step 13: Piece protection (reward for moves that protect valuable pieces)
+        if move_piece in [chess.KNIGHT, chess.ROOK, chess.BISHOP]:
+            reward += importance_scale["piece_protection"]
+
+        # Step 14: Avoiding hanging pieces (penalize if a piece is left unprotected)
+        if move_piece in [chess.KNIGHT, chess.ROOK, chess.BISHOP, chess.QUEEN]:
+            if board_copy.is_hanging(move.to_square):
+                reward -= importance_scale["avoiding_hanging_pieces"]
+
+        # Step 15: Promotion threats (reward for advancing a pawn that threatens promotion)
+        if move_piece == chess.PAWN:
+            if move.to_square in [chess.A8, chess.H8]:
+                reward += importance_scale["promotion_threats"]
+
+        # Step 16: Opposite-color bishops (reward if there is a strategic imbalance created)
+        if move_piece == chess.BISHOP:
+            if board_copy.is_opposite_color_bishops():
+                reward += importance_scale["opposite_color_bishops"]
+
+        # Step 17: Back-rank weaknesses (penalize for leaving a back-rank weakness)
+        if move_piece == chess.PAWN:
+            if board_copy.is_back_rank_weak():
+                reward -= importance_scale["back_rank_weaknesses"]
+
+        # Step 18: Isolated pawns (penalize isolated pawns)
+        if move_piece == chess.PAWN:
+            if board_copy.is_isolated_pawn(move.to_square):
+                reward -= importance_scale["isolated_pawns"]
+
+        # Step 19: Doubled pawns (penalize for doubled pawns)
+        if move_piece == chess.PAWN:
+            if board_copy.is_doubled_pawn(move.to_square):
+                reward -= importance_scale["doubled_pawns"]
+
+        # Step 20: Connected pawns (reward for connected pawns)
+        if move_piece == chess.PAWN:
+            if board_copy.is_connected_pawn(move.to_square):
+                reward += importance_scale["connected_pawns"]
+
+        # Step 21: Backward pawns (penalize if move creates a backward pawn)
+        if move_piece == chess.PAWN:
+            if board_copy.is_backward_pawn(move.to_square):
+                reward -= importance_scale["backward_pawns"]
+
+        # Step 22: Weak squares (penalize if a weak square is created)
+        if move_piece in [chess.KNIGHT, chess.BISHOP, chess.ROOK]:
+            if board_copy.is_weak_square(move.to_square):
+                reward -= importance_scale["weak_squares"]
+
+        # Step 23: En passant capture (reward for en passant)
+        if board_copy.is_en_passant(move):
+            reward += importance_scale["en_passant"]
+
+        # Step 24: Attacking opponent’s weak piece (reward for attacking vulnerable pieces)
+        if move_piece in [chess.QUEEN, chess.ROOK, chess.KNIGHT]:
+            if board_copy.is_attacking_weak_piece(move.to_square):
+                reward += importance_scale["material_gain_loss"] * 0.75
+
+        # Step 25: Counter-attacks (reward for moves that create counter threats)
+        if board_copy.is_check():
+            reward += importance_scale["threats_and_tactics"] * 0.5  # Reward for counter-threats
+
+        
+        if self.is_piece_vulnerable(board_copy, move.to_square):
+            captured_piece = board_copy.piece_at(move.to_square)
+            if captured_piece:
+                piece_type = captured_piece.piece_type
+                reward -= importance_scale["material_gain_loss"] * piece_value.get(piece_type, 0.0) * 0.2
+
+        reward -= 0.05
 
         return reward
 
 
-
-
     def find_best_move_with_q_values(self, board, gamma=0.99, alpha=0.1):
-        global best_move_q_value, stock_best_move_q_value, stock_best_move_q_values
+        global best_move_q_value
         """
         Calculate the Q-values for each legal move, update the Q-value using Q-learning,
         and return the move with the highest Q-value.
@@ -593,8 +813,6 @@ class ChessRLAI:
 
         # Initialize best_move outside the if-else block
         best_move = None
-        result = engine.play(board, chess.engine.Limit(time=1.5))
-        stock_best_move = result.move
         if rand_val < self.epsilon:
             # Explore: Choose a random legal move
             best_move = random.choice(legal_moves)
@@ -621,7 +839,34 @@ class ChessRLAI:
             with torch.no_grad():
                 # Loop through each legal move and calculate the Q-value
                 for move in legal_moves:
-                    updated_q_value = calculate_single_move_q_value(move, self.model, gamma, alpha, self.reward_of_move(move, board))
+                    # Step 1: Convert the current board state to tensor
+                    state_tensor = board_to_tensor(board).unsqueeze(0)  # Add batch dimension
+
+                    # Step 2: Get the Q-values for the current state
+                    current_q_values = self.model(state_tensor).squeeze(0)
+
+                    # Step 3: Simulate the move by copying the board and making the move on the clone
+                    cloned_board = copy.deepcopy(board)  # Clone the board
+                    cloned_board.push(move)  # Make the move on the cloned board
+
+                    # Step 4: Convert the new state after the move to tensor
+                    next_state_tensor = board_to_tensor(cloned_board).unsqueeze(0)  # Get the next state tensor after the move
+
+                    # Step 5: Get the Q-values for the next state
+                    next_q_values = self.model(next_state_tensor).squeeze(0)
+
+                    # Step 6: Calculate the maximum Q-value for the next state
+                    max_next_q_value = torch.max(next_q_values).item()
+
+                    # Step 7: Find the index of the move in the model's Q-value predictions
+                    move_index = legal_moves.index(move)
+
+                    # Step 8: Get the current Q-value for the move
+                    current_q_value = current_q_values[move_index].item()
+
+                    # Step 9: Calculate the new Q-value using the Q-learning equation
+                    updated_q_value = current_q_value + alpha * (self.reward_of_move(move, board) + gamma * max_next_q_value - current_q_value)
+
                     # Append the updated Q-value to the list
                     q_values.append(updated_q_value)
 
@@ -650,11 +895,8 @@ class ChessRLAI:
 
                 self.sum_reward += self.reward_of_move(best_move, board)
                 
-        stock_best_move_q_value = calculate_single_move_q_value(stock_best_move, self.model, gamma, alpha, self.reward_of_move(stock_best_move, board))
-        stock_best_move_q_values.append(stock_best_move_q_value)
-
         turn_q_values.append(best_move_q_value)
-
+        
 
         # Decay epsilon after each move
         self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
@@ -684,11 +926,10 @@ def plot_results():
     
     # First subplot: Total Reward vs Turns
     ax[0, 0].cla()  # Clear the first subplot
-    ax[0, 0].plot(turn_numbers, stock_best_move_q_values, marker='x', color='g', label="Stock Best Move Q-Values")
-    ax[0, 0].plot(turn_numbers, turn_q_values, marker='s', color='r', label="Turn Q-Values")
-    ax[0, 0].set_title("Q values of best move VS Q vals of played move")
+    ax[0, 0].plot(turn_numbers, total_rewards, marker='o', color='b', label="Total Reward")
+    ax[0, 0].set_title("Total Reward vs Turns")
     ax[0, 0].set_xlabel("Turns")
-    ax[0, 0].set_ylabel("Q Values")
+    ax[0, 0].set_ylabel("Total Reward")
     ax[0, 0].grid(True)
     ax[0, 0].legend()
 
@@ -808,23 +1049,22 @@ def on_click(event):
             # Reset to first click mode after move
         elif piece:
             # Check if the clicked piece is a rook for castling logic
-            if piece.piece_type == chess.ROOK:
-                print(f"Clicked on: {piece} at {clicked_square}")
-                if board.has_castling_rights(chess.WHITE):
-                    if clicked_square == "h1" and uci_click == "e1":
-                        makePlayerMove("e1g1")
-                        firstClick = True
-                        highlighted_square = None
-                        highlighted_legal_moves = []
-                        turn.set(1)
-                        return
-                    elif clicked_square == "a1" and uci_click == "e1":
-                        makePlayerMove("e1c1")
-                        firstClick = True
-                        highlighted_square = None
-                        highlighted_legal_moves = []
-                        turn.set(1)
-                        return
+            print(f"Clicked on: {piece} at {clicked_square}")
+            if board.has_castling_rights(chess.WHITE):
+                if (clicked_square == "h1" or clicked_square == "g1") and uci_click == "e1":
+                    makePlayerMove("e1g1")
+                    firstClick = True
+                    highlighted_square = None
+                    highlighted_legal_moves = []
+                    turn.set(1)
+                    return
+                elif (clicked_square == "a1" or clicked_square == "c1")  and uci_click == "e1":
+                    makePlayerMove("e1c1")
+                    firstClick = True
+                    highlighted_square = None
+                    highlighted_legal_moves = []
+                    turn.set(1)
+                    return
                 else:
                     print("Clicked on a piece: " + str(piece) + ". At index: " + str(square) + ". Clicked on:" + clicked_square)
                     highlighted_square = None
@@ -1148,9 +1388,31 @@ def play_pvrla():
     print("stalemates: ", stalemates)
 
 
-    board.set_board_fen(chess.STARTING_BOARD_FEN)
+    reset_game()
     plot_results()
     start_game()
+
+def reset_game():
+    global highlighted_square, highlighted_legal_moves, firstClick, uci_click, turn, board, canvas
+    
+    # Reset global variables
+    highlighted_square = None
+    highlighted_legal_moves = []
+    firstClick = True
+    uci_click = ""
+    
+    # Set turn to white (0 for white's turn, 1 for black's turn)
+    turn.set(0)  # White's turn (set to 0 for white, 1 for black)
+
+    # Reset the chessboard to the starting position
+    board = chess.Board()
+    
+    # Redraw the board
+    canvas.delete("all")  # Clear the canvas
+    display_board()        # Redraw the board with updated highlights (assuming you have a display_board function)
+
+    # Print a statement for debugging purposes
+    print("Game has been reset. It is now White's turn.")
 
 
 
