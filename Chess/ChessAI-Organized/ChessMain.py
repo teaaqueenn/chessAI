@@ -1,4 +1,4 @@
-import ChessGame
+from ChessGame import ChessGame
 from ChessTrainer import ModelTrainer
 import tkinter as tk
 class ChessGameRunner:
@@ -48,13 +48,6 @@ class ChessGameRunner:
         self.game.reset_game()
         # Start the game
         self.start_game()        
-
-# Assuming ChessGame and ModelTrainer classes are defined elsewhere as needed.
-# The ChessGame class is expected to be implemented with the methods like `play_pvrla()` and `reset_game()`
-
-# Example Usage:
-# Create a Tkinter canvas and root window
-import tkinter as tk
 
 root = tk.Tk()
 canvas = tk.Canvas(root, width=640, height=640)
