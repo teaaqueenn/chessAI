@@ -1,9 +1,30 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
 
 class DQN(nn.Module):
+    """
+    A Deep Q-Network (DQN) implemented with PyTorch.
+
+    This class represents a DQN model with a very deep neural network architecture (20 layers) to estimate
+    the Q-values of a given state in a chess game. The Q-values are computed by passing the input through all
+    the layers with ReLU activation.
+
+    Attributes:
+        fc1 (nn.Linear): The first fully connected layer with 2048 units.
+        -->
+        fc20 (nn.Linear): The output layer with 4672 units (for possible moves).
+
+    Methods:
+        forward(self, x): Computes the Q-values of a given state by passing the input through all the layers with ReLU activation.
+    """
+
     def __init__(self):
+        """
+        Initializes the DQN model.
+
+        Initializes the DQN model with a very deep neural network architecture (20 layers) to estimate
+        the Q-values of a given state in a chess game.
+        """
         super(DQN, self).__init__()
         
         # Input layer: 12 * 8 * 8 = 768 (flattened input)
@@ -26,12 +47,21 @@ class DQN(nn.Module):
         self.fc17 = nn.Linear(16, 8)            # Seventeenth hidden layer with 8 units
         self.fc18 = nn.Linear(8, 8)             # Eighteenth hidden layer with 8 units
         self.fc19 = nn.Linear(8, 4)             # Nineteenth hidden layer with 4 units
-        self.fc20 = nn.Linear(4, 4672)  # Output layer with 4672 units (for possible moves)
+        self.fc20 = nn.Linear(4, 4672)          # Output layer with 4672 units (for possible moves)
 
         # Dropout layer to prevent overfitting (applied after each hidden layer)
         self.dropout = nn.Dropout(0.3)  # Dropout with 30% probability of zeroing out inputs
 
     def forward(self, x):
+        """
+        Computes the Q-values of a given state by passing the input through all the layers with ReLU activation.
+
+        Args:
+            x (torch.Tensor): The input tensor of shape (batch_size, 768) containing the flattened chess board state.
+
+        Returns:
+            x (torch.Tensor): The output tensor of shape (batch_size, 4672) containing the estimated Q-values.
+        """
         # Passing the input through all the layers with ReLU activation
         x = torch.relu(self.fc1(x))
         x = self.dropout(x)
@@ -90,3 +120,4 @@ class DQN(nn.Module):
         x = self.fc19(x)  # No activation for the last hidden layer
         x = self.fc20(x)  # Output layer with dynamic action space size
         return x
+

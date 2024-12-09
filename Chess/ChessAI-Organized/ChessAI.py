@@ -1,35 +1,48 @@
 import chess
-import tkinter as tk
-from tkinter import messagebox
-import threading
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import random
-import time
-import matplotlib.pyplot as plt
-from matplotlib.pyplot import figure
 import copy
-from tkinter import simpledialog
-import os
-import random
-import torch
 import chess
 import chess.engine
 import numpy as np
-from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
-import torch.utils.data as data
-import seaborn as sns
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import precision_score, recall_score, f1_score
 import matplotlib.pyplot as plt
-import ChessDQN as DQN
+from ChessDQN import DQN
 
 class ChessRLAI:
-    def __init__(self, model = DQN(), epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.995, learning_rate=0.001, gamma=0.99):
+    """
+    The ChessRLAI class is responsible for making moves in a game of chess using reinforcement learning.
+
+    Attributes:
+        model (DQN): The neural network model used to estimate Q-values.
+        epsilon (float): The initial value of epsilon, which determines how often to select a random move.
+        epsilon_min (float): The minimum value of epsilon.
+        epsilon_decay (float): The decay factor for epsilon.
+        learning_rate (float): The learning rate for the optimizer.
+        gamma (float): The discount factor for future rewards.
+        total_reward (float): The total reward accumulated over all games.
+        sum_reward (float): The sum of all rewards in the current game.
+        total_loss (float): The total loss accumulated over all moves.
+        turn_reward (float): The reward for the current move.
+        turn_q_values (list): A list of Q-values for all possible moves in the current turn.
+    """
+
+    def __init__(self, model=DQN(), epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.995, learning_rate=0.001, gamma=0.99):
+        """
+        Initializes the ChessRLAI class.
+
+        Args:
+            model (DQN): The neural network model used to estimate Q-values.
+            epsilon (float): The initial value of epsilon, which determines how often to select a random move.
+            epsilon_min (float): The minimum value of epsilon.
+            epsilon_decay (float): The decay factor for epsilon.
+            learning_rate (float): The learning rate for the optimizer.
+            gamma (float): The discount factor for future rewards.
+        """
         self.model = model
         self.epsilon = epsilon  # Initial epsilon
         self.epsilon_min = epsilon_min  # Minimum value of epsilon
@@ -46,13 +59,27 @@ class ChessRLAI:
 
         self.load_pretrained_weights(r"C:\Users\Grace\Documents\GitHub\chessAI\chess_ai_model_v1.pth")
 
-    def load_model(model):
+    def load_model(self, model):
+        """
+        Loads a pre-trained model from a file.
+
+        @param model (DQN): The neural network model to load the pre-trained weights into.
+        """
         filename = r"C:\Users\Grace\Documents\GitHub\chessAI\chess_ai_model_v1.pth"
         model.load_state_dict(torch.load(filename))
         model.eval()  # Set the model to evaluation mode
         print(f"Model loaded from {filename}")
+
     
     def board_to_tensor(self, board):
+        """
+        Convert the chess board to a tensor representation.
+
+        @param board (chess.Board): The chess board to convert to a tensor.
+
+        @return tensor (torch.Tensor): The tensor representation of the chess board. The tensor has shape (12, 8, 8) and contains 0s and 1s.
+
+        """
         # Create a tensor to represent the board state (12 layers, 8x8 grid)
         tensor = torch.zeros((12, 8, 8), dtype=torch.float32)  # 12 layers (6 piece types for white and black)
 
@@ -82,20 +109,28 @@ class ChessRLAI:
         return tensor
 
 
+
     def load_pretrained_weights(self, path):
+        """
+        Load pretrained weights into the model from a specified file path.
+
+        @param path (str): The file path to the pretrained model weights.
+        """
+        # Load the model state dictionary from the specified path
         self.model.load_state_dict(torch.load(path))
 
     def update_model_after_game(self, game_moves, game_rewards):
         """
         Update the model after the entire game using Q-learning.
 
-        Parameters:
-            game_moves (list of chess.Move): The list of moves made during the game.
-            game_rewards (list of float): The rewards received for each move in the game.
+        @param game_moves (list of chess.Move): The list of moves made during the game.
+
+        @param game_rewards (list of float): The rewards received for each move in the game.
         """
         # Initialize total loss for the game
         total_loss = 0
 
+        # Iterate over each move and its corresponding reward
         for move, reward in zip(game_moves, game_rewards):
             # Convert the current board state to tensor
             state_tensor = self.board_to_tensor(move.board()).unsqueeze(0)  # Add batch dimension
@@ -156,8 +191,7 @@ class ChessRLAI:
         """
         Save the current state of the model to a file.
 
-        Parameters:
-            filename (str): The name of the file where the model will be saved.
+        @param filename (str): The name of the file where the model will be saved.
         """
         torch.save(self.model.state_dict(), filename)
         print(f"Model saved as '{filename}'")
@@ -166,6 +200,12 @@ class ChessRLAI:
         """
         Check if the piece at `square` is performing a fork.
         A fork happens when one piece attacks two or more pieces of the opponent.
+
+        @param board (chess.Board): The current board state.
+
+        @param square (chess.Square): The square where the piece is located.
+
+        @return bool: True if the piece is performing a fork, False otherwise.
         """
         piece = board.piece_at(square)
         if piece is None or piece.color != chess.BLACK:
@@ -184,6 +224,13 @@ class ChessRLAI:
         """
         Check if the piece at `square` is attacking two opponent pieces at the same time.
         A double attack occurs when one piece attacks two opponent pieces simultaneously.
+
+        @param board (chess.Board): The current board state.
+
+        @param square (chess.Square): The square where the piece is located.
+
+        @return bool: True if the piece is performing a double attack, False otherwise.
+
         """
         piece = board.piece_at(square)
         if piece is None or piece.color != chess.BLACK:
@@ -203,6 +250,11 @@ class ChessRLAI:
         Check if there is a back rank threat against the opponent's king.
         A back rank threat occurs when the opponent's king is on the back rank
         and there is a potential check from a black piece (typically a rook or queen).
+
+        @param board (chess.Board): The current board state.
+
+        @return bool: True if there is a back rank threat, False otherwise.
+
         """
         # Get the location of the white king (since we're checking for black's threat)
         white_king_square = board.king(chess.WHITE)
@@ -232,9 +284,16 @@ class ChessRLAI:
         return False
     
     def is_piece_vulnerable(self, board, square):
+        """
+        Check if a piece on a given square is vulnerable to capture by the opponent.
+
+        @param board (chess.Board): The current board state.
+        @param square (int): The chess square to check.
+        @return bool: True if the piece is vulnerable, False otherwise.
+        """
         # Determine which color is playing
         color = board.turn
-        
+
         # Iterate over all opponent's pieces
         opponent_color = not color
         for square in chess.SQUARES:
@@ -248,9 +307,16 @@ class ChessRLAI:
         return False
 
 
+
     def reward_of_move(self, move, board) -> float:
         """
         Calculate the reward for a given move, considering both tactical motifs and material factors.
+
+        @param move (chess.Move): The move to be evaluated.
+
+        @param board (chess.Board): The current board state.
+
+        @return float: The reward value.
         """
         reward = 0.0
 
@@ -452,15 +518,13 @@ class ChessRLAI:
         Calculate the Q-values for each legal move, update the Q-value using Q-learning,
         and return the move with the highest Q-value.
 
-        Parameters:
-            board (chess.Board): The current state of the board.
-            legal_moves (list): A list of legal moves (chess.Move objects).
-            reward (float): The reward for making the move.
-            gamma (float): The discount factor for future rewards.
-            alpha (float): The learning rate for updating Q-values.
+        @param board (chess.Board): The current state of the board.
+        @param legal_moves (list): A list of legal moves (chess.Move objects).
+        @param reward (float): The reward for making the move.
+        @param gamma (float): The discount factor for future rewards.
+        @param alpha (float): The learning rate for updating Q-values.
 
-        Returns:
-            chess.Move: The move with the highest Q-value (in UCI notation).
+        @return chess.Move: The move with the highest Q-value (in UCI notation).
         """
         # Initialize a list to store the Q-values for each legal move
         q_values = []

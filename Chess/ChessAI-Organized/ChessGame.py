@@ -1,12 +1,20 @@
 import chess
 import tkinter as tk
-from tkinter import simpledialog
-import torch
-import ChessAI as ChessRLAI
-import ChessDQN as DQN
+from ChessAI import ChessRLAI
+from ChessDQN import DQN
 
 class ChessGame:
+    """
+    Class for a game of chess, with a tkinter GUI and the ability to play against a PvRLA AI.
+    """
+
     def __init__(self, canvas, root):
+        """
+        Initialize a ChessGame object.
+
+        @param canvas: A tkinter Canvas widget to draw the board on.
+        @param root: A tkinter root window to display the board in.
+        """
         self.canvas = canvas
         self.root = root
         self.board = chess.Board()
@@ -30,6 +38,11 @@ class ChessGame:
 
     # Function to handle click events
     def on_click(self, event):
+        """
+        Handle a click event on the board.
+
+        @param event: A tkinter event object for the click.
+        """
         col = event.x // 80
         row = event.y // 80
 
@@ -79,6 +92,11 @@ class ChessGame:
         self.display_board()
 
     def handle_castling(self, clicked_square):
+        """
+        Handle a click on a square that is a potential castling destination.
+
+        @param clicked_square: The chess square that was clicked.
+        """
         if self.board.has_castling_rights(chess.WHITE):
             if (clicked_square == "h1" or clicked_square == "g1") and self.uci_click == "e1":
                 self.makePlayerMove("e1g1")
@@ -96,6 +114,13 @@ class ChessGame:
                 self.firstClick = True  # Go back to selecting a new piece
 
     def get_legal_moves(self, board, clicked_square):
+        """
+        Get the legal moves for a piece on a given square.
+
+        @param board: The current state of the board.
+        @param clicked_square: The square that the piece is on.
+        @return: A list of legal moves for the piece.
+        """
         legal_moves = []
         moves = list(board.legal_moves)
         
@@ -115,6 +140,9 @@ class ChessGame:
         return legal_moves
 
     def display_board(self):
+        """
+        Draw the board on the canvas.
+        """
         square_size = 80
         for row in range(8):
             for col in range(8):
@@ -150,6 +178,11 @@ class ChessGame:
                                     8 * square_size + 10, text=chr(ord('a') + col), font=("Times New Roman", 14))
 
     def makePlayerMove(self, move_uci):
+        """
+        Make a player move on the board.
+
+        @param move_uci: The move in UCI format.
+        """
         try:
             move = chess.Move.from_uci(move_uci)
             if move in self.board.legal_moves:
@@ -162,6 +195,9 @@ class ChessGame:
             print("Invalid UCI format or move.")
 
     def reset_game(self):
+        """
+        Reset the game to its initial state.
+        """
         self.highlighted_square = None
         self.highlighted_legal_moves = []
         self.firstClick = True
@@ -172,10 +208,16 @@ class ChessGame:
         self.display_board()
 
     def start_game(self):
+        """
+        Start a new game of chess.
+        """
         self.reset_game()
         self.play_pvrla()
 
     def play_pvrla(self):
+        """
+        Play a game of chess against a PvRLA AI.
+        """
         print("Game started")
         while not self.board.is_game_over():
             self.display_board()
@@ -191,17 +233,3 @@ class ChessGame:
                     print("Turn didn't change after White's move")
                 self.turn.set(1)
 
-            elif self.turn.get() == 1:
-                print("Black AI's Turn")
-                action = self.rla_agent.find_best_move_with_q_values(self.board)
-                if action in self.board.legal_moves:
-                    move = action
-                    self.makePlayerMove(move.uci())
-                    self.turn.set(0)
-                else:
-                    continue
-            self.root.after(20)
-
-        print("Game Over!")
-        print(f"Result: {self.board.result()}")
-        self.reset_game()
