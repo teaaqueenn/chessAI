@@ -1,5 +1,18 @@
 # ♟️ AI Chess with Reinforcement Learning
 
+TLDR; Built a reinforcement-learning chess AI from scratch in Python, trained on 700+ games with custom reward functions; visualized performance using precision, recall, and F1 graphs. Note: Most complete versions live in pre-trained-edition, saving, or v7-touchscreen-version branches; repo has messy branches due to early Git mistakes.
+
+organization = refactor without graphs
+
+stockfish-rewards = Stockfish integration experiment
+
+Photos of one of the graphs + AI Vs Human
+<img width="640" height="480" alt="image" src="https://github.com/user-attachments/assets/6ac221ca-9806-4dc1-90ff-b2197cafc3e7" />
+<img width="1920" height="1069" alt="image" src="https://github.com/user-attachments/assets/d70e039e-8733-420f-ab65-d241dbdfce45" />
+More graphs are in Chess/graphs in a previously mentioned branch.
+
+
+
 ## Overview
 
 This project is a self-driven exploration into reinforcement learning, applied to chess. The goal was to build an AI agent that learns how to play chess through self-play and training, without prior domain knowledge. Initially motivated by the fact that all my friends knew how to play chess and I didn’t, this turned into a full development and learning experience in machine learning, game logic, and performance visualization.
