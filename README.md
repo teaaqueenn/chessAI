@@ -6,6 +6,8 @@ This project is a self-driven exploration into reinforcement learning, applied t
 
 The project is built in Python and evolved through multiple iterations, learning from failures and making gradual improvements — from scratch-built rule logic to AI integration and performance tracking through graphs and custom metrics.
 
+The branches on this project are MESSY, but I tried. "organization" is the branch where i restructured the code to be cleaner, however, in the process I did not implement live graphing utility. "stockfish-rewards" was my attempt to utilize stockfish's API as the rewards system instead of my custom rewards system. either "pre-trained-edition", "saving" or "v7-touchscreen-version" is the most complete version without the experiments mentioned above. I made this 8 months ago and my branch naming was horrible (as were my git conventions), forgive me. There are graphs for training and for when one of my friends (who actually knows how to play chess) played against it. They are in the organization branch, along with a few others.
+
 ---
 
 ## 🚧 Development Timeline
